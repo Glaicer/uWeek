@@ -31,6 +31,9 @@ test("список использует общий редактор и сохр�
     .getByRole("textbox", { name: "Название списка", exact: true })
     .fill("Мои планы");
   await list.getByRole("button", { name: "Сохранить название" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Название списка сохранено",
+  );
   await page.reload();
   await page
     .getByRole("region", { name: "Список: Мои планы", exact: true })
