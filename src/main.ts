@@ -10,12 +10,24 @@ async function start(): Promise<void> {
     const storage = await PlannerStorage.open();
     const today = new Date();
     const days = currentWeek(today);
-    const [tasks, lists] = await Promise.all([
+    const [tasks, lists, hideCompleted] = await Promise.all([
       storage.readWeek(calendarDate(days[0]), calendarDate(days[6])),
       storage.readLists(),
+      storage.readHideCompleted(),
     ]);
-    renderBoard(app, days, calendarDate(today), tasks, lists, (title, date) =>
-      storage.createTask(title, date),
+    renderBoard(
+      app,
+      days,
+      calendarDate(today),
+      tasks,
+      lists,
+      (title, date) => storage.createTask(title, date),
+      {
+        hideCompleted,
+        saveHideCompleted: (value) => storage.saveHideCompleted(value),
+        updateTask: (id, edits) => storage.updateTask(id, edits),
+        deleteTask: (id) => storage.deleteTask(id),
+      },
     );
   } catch {
     app.innerHTML =
