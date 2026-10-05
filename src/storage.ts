@@ -246,6 +246,138 @@ export class PlannerStorage {
     return lists.sort((a, b) => a.order - b.order);
   }
 
+  createList(title: string): Promise<SomedayList> {
+    return this.writeList(title);
+  }
+
+  renameList(id: string, title: string): Promise<SomedayList> {
+    return this.writeList(title, id);
+  }
+
+  private async writeList(title: string, id?: string): Promise<SomedayList> {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) throw new Error("Введите непустое название списка");
+    const transaction = this.database.transaction("lists", "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("lists");
+    let list: SomedayList;
+    let error: Error | undefined;
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const lists: SomedayList[] = request.result;
+      const existing = lists.find((list) => list.id === id);
+      if (id !== undefined && !existing) {
+        error = new Error("Список не найден");
+      } else if (
+        lists.some(
+          (list) =>
+            list.id !== id &&
+            list.title.trim().toLowerCase() === trimmedTitle.toLowerCase(),
+        )
+      ) {
+        error = new Error("Список с таким названием уже существует");
+      }
+      if (error) {
+        transaction.abort();
+        return;
+      }
+      list = existing
+        ? { ...existing, title: trimmedTitle }
+        : {
+            id: crypto.randomUUID(),
+            title: trimmedTitle,
+            order: Math.max(-1, ...lists.map((list) => list.order)) + 1,
+          };
+      store.put(list);
+    };
+    try {
+      await done;
+    } catch (failure) {
+      throw error ?? failure;
+    }
+    return list!;
+  }
+
+  async deleteList(id: string): Promise<void> {
+    const transaction = this.database.transaction(
+      ["lists", "tasks"],
+      "readwrite",
+    );
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("lists");
+    let error: Error | undefined;
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const lists: SomedayList[] = request.result;
+      const tasks = transaction.objectStore("tasks").getAll();
+      tasks.onsuccess = () => {
+        if (lists.length <= 1) {
+          error = new Error("Нельзя удалить последний список");
+        } else if (
+          (tasks.result as Task[]).some((task) => task.placement.listId === id)
+        ) {
+          error = new Error(
+            "Нельзя удалить список с задачами. Сначала удалите или перенесите задачи.",
+          );
+        }
+        if (error) transaction.abort();
+        else store.delete(id);
+      };
+    };
+    try {
+      await done;
+    } catch (failure) {
+      throw error ?? failure;
+    }
+  }
+
+  async readListTasks(): Promise<Task[]> {
+    const transaction = this.database.transaction("tasks", "readonly");
+    const done = transactionDone(transaction);
+    const [tasks] = await Promise.all([
+      requestResult<Task[]>(transaction.objectStore("tasks").getAll()),
+      done,
+    ]);
+    return tasks
+      .filter((task) => task.placement.listId !== undefined)
+      .sort((a, b) => a.order - b.order);
+  }
+
+  async createListTask(title: string, listId: string): Promise<Task> {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) throw new Error("Введите название задачи");
+    const transaction = this.database.transaction(
+      ["tasks", "lists"],
+      "readwrite",
+    );
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("tasks");
+    let task: Task;
+    const list = transaction.objectStore("lists").get(listId);
+    list.onsuccess = () => {
+      if (!list.result) {
+        transaction.abort();
+        return;
+      }
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const tasks = (request.result as Task[]).filter(
+          (task) => task.placement.listId === listId,
+        );
+        task = {
+          id: crypto.randomUUID(),
+          title: trimmedTitle,
+          completed: false,
+          placement: { listId },
+          order: Math.max(-1, ...tasks.map((task) => task.order)) + 1,
+        };
+        store.add(task);
+      };
+    };
+    await done;
+    return task!;
+  }
+
   async createTask(title: string, date: string): Promise<Task> {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) throw new Error("Введите название задачи");

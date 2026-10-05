@@ -18,10 +18,11 @@ export async function startNavigation(
   let settings = await storage.readSettings();
   async function render(): Promise<void> {
     const days = currentWeek(selected, settings.weekStartsOn);
-    const [tasks, lists, hideCompleted] = await Promise.all([
+    const [tasks, lists, hideCompleted, listTasks] = await Promise.all([
       storage.readWeek(calendarDate(days[0]), calendarDate(days[6])),
       storage.readLists(),
       storage.readHideCompleted(),
+      storage.readListTasks(),
     ]);
     renderBoard(
       root,
@@ -32,6 +33,12 @@ export async function startNavigation(
       (title, date) => storage.createTask(title, date),
       {
         hideCompleted,
+        listTasks,
+        createListTask: (title, listId) =>
+          storage.createListTask(title, listId),
+        createList: (title) => storage.createList(title),
+        renameList: (id, title) => storage.renameList(id, title),
+        deleteList: (id) => storage.deleteList(id),
         saveHideCompleted: (value) => storage.saveHideCompleted(value),
         updateTask: (id, edits) => storage.updateTask(id, edits),
         deleteTask: (id) => storage.deleteTask(id),

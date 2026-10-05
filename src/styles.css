@@ -114,7 +114,12 @@ button:disabled {
   gap: 24px;
 }
 .lists section {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border-top: 1px solid #dce2d8;
+}
+.lists form[hidden] {
+  display: none;
 }
 @media (min-width: 1200px) {
   .week {
@@ -210,6 +215,25 @@ button:disabled {
 }
 .editor-actions button {
   flex: 1 1 120px;
+}
+
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.checklist li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+}
+.checklist input {
+  width: 44px;
+  height: 44px;
+  accent-color: #39644d;
+}
+.checklist .editor-actions {
+  grid-column: 1 / -1;
 }
 
 nav {
