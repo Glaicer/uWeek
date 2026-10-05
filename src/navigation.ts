@@ -17,9 +17,10 @@ export async function startNavigation(
   let settings = await storage.readSettings();
   async function render(): Promise<void> {
     const days = currentWeek(selected, settings.weekStartsOn);
-    const [tasks, lists] = await Promise.all([
+    const [tasks, lists, hideCompleted] = await Promise.all([
       storage.readWeek(calendarDate(days[0]), calendarDate(days[6])),
       storage.readLists(),
+      storage.readHideCompleted(),
     ]);
     renderBoard(
       root,
@@ -28,6 +29,12 @@ export async function startNavigation(
       tasks,
       lists,
       (title, date) => storage.createTask(title, date),
+      {
+        hideCompleted,
+        saveHideCompleted: (value) => storage.saveHideCompleted(value),
+        updateTask: (id, edits) => storage.updateTask(id, edits),
+        deleteTask: (id) => storage.deleteTask(id),
+      },
     );
     const navigation = document.createElement("nav");
     navigation.setAttribute("aria-label", "Навигация по неделям");

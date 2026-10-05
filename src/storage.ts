@@ -1,4 +1,10 @@
-import type { PlannerSettings, SomedayList, Task } from "./model";
+import {
+  taskColors,
+  type PlannerSettings,
+  type SomedayList,
+  type Task,
+  type TaskEdits,
+} from "./model";
 
 const databaseName = "yourweek";
 const schemaVersion = 2;
@@ -36,8 +42,12 @@ export class PlannerStorage {
             lists.add({ id: crypto.randomUUID(), title, order });
           });
         }
-        database.createObjectStore("settings");
-        database.createObjectStore("navigation");
+        if (!database.objectStoreNames.contains("settings")) {
+          database.createObjectStore("settings");
+        }
+        if (!database.objectStoreNames.contains("navigation")) {
+          database.createObjectStore("navigation");
+        }
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -133,5 +143,55 @@ export class PlannerStorage {
       };
       done.then(() => resolve(task), reject);
     });
+  }
+  async updateTask(id: string, edits: Partial<TaskEdits>): Promise<Task> {
+    if (edits.title !== undefined && !edits.title.trim()) {
+      throw new Error("Введите название задачи");
+    }
+    if (edits.color !== undefined && !Object.hasOwn(taskColors, edits.color)) {
+      throw new Error("Выберите цвет из палитры");
+    }
+    const transaction = this.database.transaction("tasks", "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("tasks");
+    let task: Task;
+    const request = store.get(id);
+    request.onsuccess = () => {
+      if (!request.result) {
+        transaction.abort();
+        return;
+      }
+      task = { ...request.result, ...edits };
+      if (edits.title !== undefined) task.title = edits.title.trim();
+      store.put(task);
+    };
+    await done;
+    return task!;
+  }
+
+  async deleteTask(id: string): Promise<void> {
+    const transaction = this.database.transaction("tasks", "readwrite");
+    const done = transactionDone(transaction);
+    transaction.objectStore("tasks").delete(id);
+    await done;
+  }
+
+  async readHideCompleted(): Promise<boolean> {
+    const transaction = this.database.transaction("settings", "readonly");
+    const done = transactionDone(transaction);
+    const [setting] = await Promise.all([
+      requestResult<boolean | undefined>(
+        transaction.objectStore("settings").get("hideCompleted"),
+      ),
+      done,
+    ]);
+    return setting ?? false;
+  }
+
+  async saveHideCompleted(value: boolean): Promise<void> {
+    const transaction = this.database.transaction("settings", "readwrite");
+    const done = transactionDone(transaction);
+    transaction.objectStore("settings").put(value, "hideCompleted");
+    await done;
   }
 }
