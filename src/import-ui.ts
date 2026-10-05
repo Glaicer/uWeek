@@ -21,8 +21,16 @@ export function mountCsvImport(
     input.disabled = true;
     status.textContent = "Проверка CSV…";
     let preview: CsvPreview;
+    let newListTitles: readonly string[];
     try {
       preview = await prepareCsv(file);
+      const lists = await storage.readLists();
+      newListTitles = preview.listTitles.filter(
+        (title) =>
+          !lists.some(
+            (list) => list.title.trim().toLowerCase() === title.toLowerCase(),
+          ),
+      );
     } catch (error) {
       status.textContent =
         error instanceof Error ? error.message : "Не удалось прочитать CSV";
@@ -36,14 +44,14 @@ export function mountCsvImport(
     const heading = document.createElement("h2");
     heading.textContent = "Импорт CSV";
     const summary = document.createElement("p");
-    summary.textContent = `Задач: ${preview.records.length}. Выполненных: ${preview.completed}. Невыполненных: ${preview.records.length - preview.completed}. Пустых записей: ${preview.emptyRecords}. Точные повторные вхождения: ${preview.duplicateOccurrences}. Диапазон дат: ${preview.firstDate ?? "нет"} — ${preview.lastDate ?? "нет"}.`;
+    summary.textContent = `Задач: ${preview.records.length}. Выполненных: ${preview.completed}. Невыполненных: ${preview.records.length - preview.completed}. Без даты: ${preview.undated}. Создаваемые списки: ${newListTitles.join(", ") || "нет"}. Пустых записей: ${preview.emptyRecords}. Точные повторные вхождения: ${preview.duplicateOccurrences}. Диапазон дат: ${preview.firstDate ?? "нет"} — ${preview.lastDate ?? "нет"}.`;
     const warning = document.createElement("p");
     warning.textContent =
       "CSV не содержит правил повторения; повторяющиеся серии не восстанавливаются. Новый файл добавляет все строки и может повторять прежние задачи. Повтор тех же исходных байтов добавляет ноль задач. Файл остаётся на устройстве.";
     const list = document.createElement("ol");
     for (const record of preview.records.slice(0, 20)) {
       const item = document.createElement("li");
-      item.textContent = `Запись ${record.recordNumber}: ${record.date} — ${record.title} (${record.completed ? "выполнена" : "не выполнена"})`;
+      item.textContent = `Запись ${record.recordNumber}: ${record.date || `Без даты — ${record.listTitle}`} — ${record.title} (${record.completed ? "выполнена" : "не выполнена"})`;
       list.append(item);
     }
     const progress = document.createElement("p");

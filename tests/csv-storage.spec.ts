@@ -131,3 +131,99 @@ test("preview accepts the exact limits and validates records beyond the first tw
   }, header);
   expect(result).toEqual({ count: 100_000, duplicates: 99_999, exactCount: 1 });
 });
+
+test("undated confirmation reconciles prepared names with current lists and order while preserving source records", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const result = await page.evaluate(async (header) => {
+    const storagePath = "/src/storage.ts";
+    const csvPath = "/src/csv.ts";
+    const { PlannerStorage } = await import(storagePath);
+    const { prepareCsv } = await import(csvPath);
+    const storage = await PlannerStorage.open();
+    const old = await storage.createList("Проекты");
+    const preview = await prepareCsv(
+      new Blob([
+        `${header}\n,  Source  ,Original,,TRUE,  проекты  \n\n,  Source  ,Original,,TRUE,  проекты  \n,Default,,,FALSE,\n,Created later,,,FALSE,Работа`,
+      ]),
+    );
+    await storage.renameList(old.id, "Архив");
+    await storage.createListTask("Old task", old.id);
+    const current = await storage.createList("ПРОЕКТЫ");
+    await storage.createListTask("Existing after preview", current.id);
+    const inbox = (await storage.readLists()).find(
+      (list: { title: string }) => list.title === "Входящие",
+    )!;
+    await storage.deleteList(inbox.id);
+    const work = await storage.createList("РАБОТА");
+    await storage.commitCsv(preview);
+    const before = await storage.readSnapshot();
+    const imported = before.tasks.find(
+      (task: { title: string }) => task.title === "Source",
+    )!;
+    await storage.updateTask(imported.id, {
+      title: "Edited",
+      notes: "Edited",
+      completed: false,
+    });
+    return { before, after: await storage.readSnapshot(), current, old, work };
+  }, header);
+  const tasks = result.before.tasks
+    .filter(
+      (task: { placement: { listId: string } }) =>
+        task.placement.listId === result.current.id,
+    )
+    .sort((a: { order: number }, b: { order: number }) => a.order - b.order);
+  expect(
+    tasks.map((task: { title: string; order: number }) => [
+      task.title,
+      task.order,
+    ]),
+  ).toEqual([
+    ["Existing after preview", 0],
+    ["Source", 1],
+    ["Source", 2],
+  ]);
+  expect(new Set(tasks.map((task: { id: string }) => task.id)).size).toBe(3);
+  expect(
+    tasks
+      .slice(1)
+      .map(
+        (task: { provenance: { recordNumber: number } }) =>
+          task.provenance.recordNumber,
+      ),
+  ).toEqual([2, 4]);
+  expect(tasks[1].provenance.fields).toEqual({
+    Date: "",
+    Task: "  Source  ",
+    Notes: "Original",
+    Checklist: "",
+    Completed: "TRUE",
+    List: "  проекты  ",
+  });
+  expect(
+    result.after.tasks.find((task: { id: string }) => task.id === tasks[1].id)
+      .provenance,
+  ).toEqual(tasks[1].provenance);
+  expect(
+    result.before.tasks.find(
+      (task: { title: string }) => task.title === "Old task",
+    ).placement,
+  ).toEqual({ listId: result.old.id });
+  expect(
+    result.before.tasks.find(
+      (task: { title: string }) => task.title === "Created later",
+    ).placement,
+  ).toEqual({ listId: result.work.id });
+  expect(
+    result.before.lists
+      .sort((a: { order: number }, b: { order: number }) => a.order - b.order)
+      .map((list: { title: string }) => list.title),
+  ).toEqual(["Личное", "Идеи", "Архив", "ПРОЕКТЫ", "РАБОТА", "Входящие"]);
+  expect(result.before.importHistory).toHaveLength(1);
+  expect(result.before.importHistory[0]).toMatchObject({
+    addedTasks: 4,
+    emptyRecords: 1,
+  });
+});
