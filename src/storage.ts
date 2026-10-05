@@ -120,7 +120,7 @@ export class PlannerStorage {
       title: record.title,
       notes: record.notes,
       completed: record.completed,
-      placement: { date: record.date },
+      placement: record.date ? { date: record.date } : { listId: "" },
       order: 0,
       provenance: {
         fingerprint: preview.fingerprint,
@@ -148,31 +148,62 @@ export class PlannerStorage {
         repeated = true;
         return;
       }
-      const current = store.getAll();
-      current.onsuccess = () => {
-        try {
-          const nextOrders = new Map<string, number>();
-          for (const task of current.result as Task[]) {
-            if (task.placement.date !== undefined) {
+      const listStore = transaction.objectStore("lists");
+      const currentLists = listStore.getAll();
+      currentLists.onsuccess = () => {
+        const current = store.getAll();
+        current.onsuccess = () => {
+          try {
+            const lists = currentLists.result as SomedayList[];
+            const destinations = new Map<string, string>();
+            let nextListOrder =
+              Math.max(-1, ...lists.map((list) => list.order)) + 1;
+            for (const title of preview.listTitles) {
+              const key = title.toLowerCase();
+              let list = lists.find(
+                (list) => list.title.trim().toLowerCase() === key,
+              );
+              if (!list) {
+                list = {
+                  id: crypto.randomUUID(),
+                  title,
+                  order: nextListOrder++,
+                };
+                lists.push(list);
+                listStore.add(list);
+              }
+              destinations.set(key, list.id);
+            }
+            const nextOrders = new Map<string, number>();
+            for (const task of current.result as Task[]) {
+              const key =
+                task.placement.date !== undefined
+                  ? `date:${task.placement.date}`
+                  : `list:${task.placement.listId}`;
               nextOrders.set(
-                task.placement.date,
-                Math.max(
-                  nextOrders.get(task.placement.date) ?? 0,
-                  task.order + 1,
-                ),
+                key,
+                Math.max(nextOrders.get(key) ?? 0, task.order + 1),
               );
             }
+            for (const [index, task] of tasks.entries()) {
+              const record = preview.records[index];
+              if (record.listTitle !== undefined)
+                task.placement = {
+                  listId: destinations.get(record.listTitle.toLowerCase())!,
+                };
+              const key =
+                task.placement.date !== undefined
+                  ? `date:${task.placement.date}`
+                  : `list:${task.placement.listId}`;
+              task.order = nextOrders.get(key) ?? 0;
+              nextOrders.set(key, task.order + 1);
+              store.add(task);
+            }
+            histories.add(history);
+          } catch {
+            transaction.abort();
           }
-          for (const task of tasks) {
-            const date = task.placement.date!;
-            task.order = nextOrders.get(date) ?? 0;
-            nextOrders.set(date, task.order + 1);
-            store.add(task);
-          }
-          histories.add(history);
-        } catch {
-          transaction.abort();
-        }
+        };
       };
     };
     await done;

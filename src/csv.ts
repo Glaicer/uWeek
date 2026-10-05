@@ -15,6 +15,7 @@ export interface CsvRecord {
   readonly title: string;
   readonly notes: string;
   readonly date: string;
+  readonly listTitle: string | undefined;
   readonly completed: boolean;
 }
 export interface CsvPreview {
@@ -23,6 +24,8 @@ export interface CsvPreview {
   readonly emptyRecords: number;
   readonly completed: number;
   readonly duplicateOccurrences: number;
+  readonly undated: number;
+  readonly listTitles: readonly string[];
   readonly firstDate: string | undefined;
   readonly lastDate: string | undefined;
 }
@@ -131,14 +134,9 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
       headers.map((header, i) => [header, row[i]]),
     ) as Record<(typeof csvHeaders)[number], string>;
     if (!fields.Task.trim()) recordError(recordNumber, "пустое название Task");
-    if (!fields.Date.trim())
-      recordError(
-        recordNumber,
-        "задачи без даты пока не поддерживаются (тикет 09)",
-      );
-    if (!validDate(fields.Date))
+    if (fields.Date !== "" && !validDate(fields.Date))
       recordError(recordNumber, "некорректная календарная Date (YYYY-MM-DD)");
-    if (fields.List !== "")
+    if (fields.Date !== "" && fields.List.trim() !== "")
       recordError(recordNumber, "неоднозначное размещение Date + List");
     if (fields.Checklist !== "")
       recordError(recordNumber, "непустой Checklist не поддерживается");
@@ -155,6 +153,8 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
       title: fields.Task.trim(),
       notes: fields.Notes,
       date: fields.Date,
+      listTitle:
+        fields.Date === "" ? fields.List.trim() || "Входящие" : undefined,
       completed: fields.Completed.trim().toLowerCase() === "true",
     });
   }
@@ -162,13 +162,26 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
   const fingerprint = Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
-  const dates = records.map((record) => record.date).sort();
+  const dates = records
+    .map((record) => record.date)
+    .filter(Boolean)
+    .sort();
+  const listTitles = new Map<string, string>();
+  for (const record of records) {
+    if (
+      record.listTitle !== undefined &&
+      !listTitles.has(record.listTitle.toLowerCase())
+    )
+      listTitles.set(record.listTitle.toLowerCase(), record.listTitle);
+  }
   return {
     fingerprint,
     records,
     emptyRecords,
     completed: records.filter((record) => record.completed).length,
     duplicateOccurrences,
+    undated: records.filter((record) => record.date === "").length,
+    listTitles: [...listTitles.values()],
     firstDate: dates[0],
     lastDate: dates.at(-1),
   };

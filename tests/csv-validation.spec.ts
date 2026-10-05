@@ -20,7 +20,7 @@ const invalidFiles = [
   ],
   ["invalid day", `${header}\n2026-02-30,Invalid,,,FALSE,`, "Запись 2"],
   ["invalid status", `${header}\n2026-10-05,Invalid,,,1,`, "Completed"],
-  ["undated", `${header}\n,Invalid,,,FALSE,`, "без даты"],
+  ["whitespace date", `${header}\n ,Invalid,,,FALSE,`, "Date"],
   [
     "ambiguous placement",
     `${header}\n2026-10-05,Invalid,,,FALSE,Inbox`,
