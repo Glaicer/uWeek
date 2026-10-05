@@ -79,6 +79,7 @@ form {
   gap: 8px;
 }
 input,
+select,
 button {
   font: inherit;
   min-height: 44px;
@@ -123,4 +124,24 @@ button:disabled {
   .lists {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-top: 16px;
+}
+nav > button,
+nav > label,
+nav > form {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+nav form {
+  margin: 0;
+}
+nav label {
+  display: block;
 }

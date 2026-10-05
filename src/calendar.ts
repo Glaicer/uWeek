@@ -2,13 +2,13 @@ export function calendarDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function currentWeek(today: Date): Date[] {
+export function currentWeek(today: Date, weekStartsOn: 0 | 1 = 1): Date[] {
   const monday = new Date(
     today.getFullYear(),
     today.getMonth(),
     today.getDate(),
   );
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  monday.setDate(monday.getDate() - ((monday.getDay() - weekStartsOn + 7) % 7));
   return Array.from(
     { length: 7 },
     (_, offset) =>

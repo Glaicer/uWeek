@@ -1,7 +1,7 @@
-import type { SomedayList, Task } from "./model";
+import type { PlannerSettings, SomedayList, Task } from "./model";
 
 const databaseName = "yourweek";
-const schemaVersion = 1;
+const schemaVersion = 2;
 
 function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -28,12 +28,16 @@ export class PlannerStorage {
       const request = indexedDB.open(databaseName, schemaVersion);
       request.onupgradeneeded = () => {
         const database = request.result;
-        const tasks = database.createObjectStore("tasks", { keyPath: "id" });
-        tasks.createIndex("date", "placement.date");
-        const lists = database.createObjectStore("lists", { keyPath: "id" });
-        ["Входящие", "Личное", "Идеи"].forEach((title, order) => {
-          lists.add({ id: crypto.randomUUID(), title, order });
-        });
+        if (!database.objectStoreNames.contains("tasks")) {
+          const tasks = database.createObjectStore("tasks", { keyPath: "id" });
+          tasks.createIndex("date", "placement.date");
+          const lists = database.createObjectStore("lists", { keyPath: "id" });
+          ["Входящие", "Личное", "Идеи"].forEach((title, order) => {
+            lists.add({ id: crypto.randomUUID(), title, order });
+          });
+        }
+        database.createObjectStore("settings");
+        database.createObjectStore("navigation");
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -42,6 +46,44 @@ export class PlannerStorage {
     });
     database.onversionchange = () => database.close();
     return new PlannerStorage(database);
+  }
+
+  async readSettings(): Promise<PlannerSettings> {
+    const transaction = this.database.transaction("settings", "readonly");
+    const done = transactionDone(transaction);
+    const [settings] = await Promise.all([
+      requestResult<PlannerSettings | undefined>(
+        transaction.objectStore("settings").get("planner"),
+      ),
+      done,
+    ]);
+    return settings ?? { weekStartsOn: 1 };
+  }
+
+  async saveSettings(settings: PlannerSettings): Promise<void> {
+    const transaction = this.database.transaction("settings", "readwrite");
+    const done = transactionDone(transaction);
+    transaction.objectStore("settings").put(settings, "planner");
+    await done;
+  }
+
+  async readSelectedWeek(): Promise<string | undefined> {
+    const transaction = this.database.transaction("navigation", "readonly");
+    const done = transactionDone(transaction);
+    const [date] = await Promise.all([
+      requestResult<string | undefined>(
+        transaction.objectStore("navigation").get("selectedWeek"),
+      ),
+      done,
+    ]);
+    return date;
+  }
+
+  async saveSelectedWeek(date: string): Promise<void> {
+    const transaction = this.database.transaction("navigation", "readwrite");
+    const done = transactionDone(transaction);
+    transaction.objectStore("navigation").put(date, "selectedWeek");
+    await done;
   }
 
   async readWeek(firstDate: string, lastDate: string): Promise<Task[]> {
