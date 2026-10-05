@@ -9,11 +9,12 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "node scripts/build.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit",
+    "test:offline": "playwright test --config playwright.offline.config.ts",
     "lint": "eslint .",
-    "format:check": "prettier --check src tests *.json *.ts *.mjs index.html README.md",
+    "format:check": "prettier --check src tests scripts *.json *.ts *.mjs index.html README.md",
     "test:browser": "playwright test"
   },
   "devDependencies": {

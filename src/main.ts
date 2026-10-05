@@ -1,6 +1,7 @@
 import "./styles.css";
 import { startNavigation } from "./navigation";
 import { PlannerStorage } from "./storage";
+import { startOfflineShell } from "./offline";
 
 const app = document.querySelector<HTMLElement>("#app")!;
 
@@ -16,3 +17,4 @@ async function start(): Promise<void> {
 }
 
 void start();
+void startOfflineShell();
