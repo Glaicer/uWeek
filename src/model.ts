@@ -28,3 +28,7 @@ export interface SomedayList {
   title: string;
   order: number;
 }
+
+export interface PlannerSettings {
+  weekStartsOn: 0 | 1;
+}
