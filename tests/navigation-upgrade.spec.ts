@@ -37,13 +37,17 @@ test("обновление схемы версии 1 сохраняет суще
   await page.unroute("**/*");
   await page.clock.setFixedTime(new Date("2026-10-05T12:00:00+03:00"));
   await page.reload();
-  await expect(page.getByRole("listitem")).toHaveText("Задача до обновления");
+  await expect(page.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Задача до обновления",
+  );
   await expect(page.getByRole("heading", { name: "Мой список" })).toBeVisible();
   await page.getByLabel("Начало недели").selectOption("0");
   await page.getByRole("button", { name: "Следующая неделя" }).click();
   await page.getByRole("button", { name: "Предыдущая неделя" }).click();
   await page.reload();
-  await expect(page.getByRole("listitem")).toHaveText("Задача до обновления");
+  await expect(page.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Задача до обновления",
+  );
   await expect(page.getByRole("heading", { name: "Мой список" })).toBeVisible();
   await expect(page.getByLabel("Начало недели")).toHaveValue("0");
 });

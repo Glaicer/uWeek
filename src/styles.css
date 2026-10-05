@@ -144,10 +144,21 @@ button:disabled {
   accent-color: #39644d;
 }
 .task-row {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: start;
   gap: 4px;
   border-radius: 6px;
+}
+.task-order {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.task-order button {
+  flex: 1 1 64px;
+  min-width: 44px;
 }
 .task-row[hidden] {
   display: none;

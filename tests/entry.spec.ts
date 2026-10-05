@@ -23,7 +23,10 @@ test("пустой ввод и Escape не создают задач; новые
     await expect(input).toHaveValue("");
   }
   await page.reload();
-  await expect(day.getByRole("listitem")).toHaveText(["Первая", "Вторая"]);
+  await expect(day.getByRole("listitem").locator(".task-title")).toHaveText([
+    "Первая",
+    "Вторая",
+  ]);
   for (const title of ["Входящие", "Личное", "Идеи"]) {
     await expect(
       page.getByRole("heading", { name: title, exact: true }),
@@ -54,5 +57,7 @@ test("отмена настоящей транзакции после успех
   await input.press("Enter");
   await expect(page.getByRole("status")).toHaveText("Задача сохранена");
   await page.reload();
-  await expect(day.getByRole("listitem")).toHaveText("Не терять черновик");
+  await expect(day.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Не терять черновик",
+  );
 });

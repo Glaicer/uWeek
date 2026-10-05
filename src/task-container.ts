@@ -1,5 +1,6 @@
 import type { Task } from "./model";
 import { openTaskEditor, type TaskActions } from "./editor";
+import { samePlacement } from "./placement";
 
 export function renderTaskContainer(
   section: HTMLElement,
@@ -12,6 +13,46 @@ export function renderTaskContainer(
 ): void {
   const list = document.createElement("ul");
   list.setAttribute("aria-label", `Задачи: ${label}`);
+  const placement = section.dataset.date
+    ? { date: section.dataset.date }
+    : { listId: section.dataset.listId! };
+  const publish = (changed: Task[]) =>
+    actions.taskChanges.dispatchEvent(
+      new CustomEvent("tasks", { detail: changed }),
+    );
+  const renderTasks = () => {
+    const active = document.activeElement as HTMLElement | null;
+    const focusedId =
+      active?.closest<HTMLElement>("[data-task-id]")?.dataset.taskId;
+    const direction = active?.dataset.direction;
+    list.replaceChildren();
+    tasks
+      .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+      .forEach(appendTask);
+    if (focusedId) {
+      const row = list.querySelector<HTMLElement>(
+        `[data-task-id="${focusedId}"]`,
+      );
+      const button = direction
+        ? row?.querySelector<HTMLButtonElement>(
+            `[data-direction="${direction}"]`,
+          )
+        : undefined;
+      if (button && !button.disabled) button.focus();
+      else row?.querySelector<HTMLButtonElement>(".task-title")?.focus();
+    }
+  };
+  actions.taskChanges.addEventListener("tasks", (event) => {
+    const changed = (event as CustomEvent<Task[]>).detail;
+    tasks = tasks.filter(
+      (task) => !changed.some((entry) => entry.id === task.id),
+    );
+    tasks.push(
+      ...changed.filter((task) => samePlacement(task.placement, placement)),
+    );
+    renderTasks();
+  });
+  actions.taskChanges.addEventListener("filter", renderTasks);
   const appendTask = (task: Task) => {
     const item = document.createElement("li");
     item.className = "task-row";
@@ -31,24 +72,30 @@ export function renderTaskContainer(
       item.hidden = filter.checked && task.completed;
     };
     refresh();
-    edit.addEventListener("click", () => {
-      openTaskEditor(task, edit, actions, (saved) => {
-        if (!saved) item.remove();
-        else {
-          task = saved;
-          refresh();
-        }
-        status.textContent = saved ? "Изменения сохранены" : "Задача удалена";
-      });
+    edit.addEventListener("click", async () => {
+      edit.disabled = true;
+      try {
+        await openTaskEditor(task, edit, actions, (saved) => {
+          if (!saved) {
+            tasks = tasks.filter((entry) => entry.id !== task.id);
+            renderTasks();
+          } else publish([saved]);
+          status.textContent = saved ? "Изменения сохранены" : "Задача удалена";
+        });
+      } catch {
+        status.textContent = "Редактор не открыт. Повторите действие.";
+      } finally {
+        edit.disabled = false;
+      }
     });
     toggle.addEventListener("change", async () => {
       toggle.disabled = true;
       edit.disabled = true;
       try {
         task = await actions.updateTask(task.id, { completed: toggle.checked });
-        refresh();
+        publish([task]);
         status.textContent = "Выполнение сохранено";
-        if (item.hidden) filter.focus();
+        if (filter.checked && task.completed) filter.focus();
       } catch {
         toggle.checked = task.completed;
         status.textContent = "Выполнение не сохранено. Повторите действие.";
@@ -58,9 +105,46 @@ export function renderTaskContainer(
       }
     });
     item.append(toggle, edit);
+    const orderControls = document.createElement("div");
+    orderControls.className = "task-order";
+    item.append(orderControls);
+    const visible = tasks.filter(
+      (entry) => !filter.checked || !entry.completed,
+    );
+    const index = visible.findIndex((entry) => entry.id === task.id);
+    for (const [label, offset, position] of [
+      ["Выше", -1, "before"],
+      ["Ниже", 1, "after"],
+    ] as const) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.dataset.direction = position;
+      button.setAttribute("aria-label", `${label}: ${task.title}`);
+      const target = visible[index + offset];
+      button.disabled = !target || index === -1;
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          publish(
+            await actions.reorderTask(
+              task.id,
+              target.id,
+              position,
+              filter.checked,
+            ),
+          );
+          status.textContent = "Порядок сохранён";
+        } catch {
+          button.disabled = false;
+          status.textContent = "Порядок не сохранён. Повторите действие.";
+        }
+      });
+      orderControls.append(button);
+    }
     list.append(item);
   };
-  tasks.forEach(appendTask);
+  renderTasks();
   section.append(list);
   const form = document.createElement("form");
   const input = document.createElement("input");
@@ -85,7 +169,7 @@ export function renderTaskContainer(
     status.textContent = "Сохранение…";
     try {
       const task = await createTask(input.value);
-      appendTask(task);
+      publish([task]);
       input.value = "";
       status.textContent = "Задача сохранена";
     } catch {

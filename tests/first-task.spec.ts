@@ -13,8 +13,12 @@ test("создаёт задачу в выбранном дне и сохраня
   const input = monday.getByRole("textbox");
   await input.fill("  Купить хлеб  ");
   await input.press("Enter");
-  await expect(monday.getByRole("listitem")).toHaveText("Купить хлеб");
+  await expect(monday.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Купить хлеб",
+  );
   await expect(page.getByRole("status")).toHaveText("Задача сохранена");
   await page.reload();
-  await expect(monday.getByRole("listitem")).toHaveText("Купить хлеб");
+  await expect(monday.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Купить хлеб",
+  );
 });

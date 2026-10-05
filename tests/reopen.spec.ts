@@ -28,7 +28,8 @@ test("повторное открытие браузерного профиля 
     await expect(
       page
         .getByRole("region", { name: "понедельник, 5 октября" })
-        .getByRole("listitem"),
+        .getByRole("listitem")
+        .locator(".task-title"),
     ).toHaveText("Стабильная дата");
   } finally {
     await context.close();

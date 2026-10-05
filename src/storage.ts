@@ -5,6 +5,7 @@ import {
   type Task,
   type TaskEdits,
 } from "./model";
+import { samePlacement, validPlacement } from "./placement";
 
 const databaseName = "yourweek";
 const schemaVersion = 2;
@@ -283,7 +284,10 @@ export class PlannerStorage {
     if (edits.color !== undefined && !Object.hasOwn(taskColors, edits.color)) {
       throw new Error("Выберите цвет из палитры");
     }
-    const transaction = this.database.transaction("tasks", "readwrite");
+    const transaction = this.database.transaction(
+      ["tasks", "lists"],
+      "readwrite",
+    );
     const done = transactionDone(transaction);
     const store = transaction.objectStore("tasks");
     let task: Task;
@@ -293,12 +297,80 @@ export class PlannerStorage {
         transaction.abort();
         return;
       }
-      task = { ...request.result, ...edits };
-      if (edits.title !== undefined) task.title = edits.title.trim();
-      store.put(task);
+      const existing: Task = request.result;
+      const placement = edits.placement ?? existing.placement;
+      const write = () => {
+        const all = store.getAll();
+        all.onsuccess = () => {
+          task = { ...existing, ...edits };
+          if (edits.title !== undefined) task.title = edits.title.trim();
+          if (!samePlacement(placement, existing.placement)) {
+            const container = (all.result as Task[]).filter((entry) =>
+              samePlacement(entry.placement, placement),
+            );
+            task.order =
+              Math.max(-1, ...container.map((entry) => entry.order)) + 1;
+          }
+          store.put(task);
+        };
+      };
+      if (!validPlacement(placement)) {
+        transaction.abort();
+      } else if (placement.listId !== undefined) {
+        const list = transaction.objectStore("lists").get(placement.listId);
+        list.onsuccess = () => {
+          if (list.result) write();
+          else transaction.abort();
+        };
+      } else write();
     };
     await done;
     return task!;
+  }
+
+  async reorderTask(
+    id: string,
+    targetId: string,
+    position: "before" | "after",
+    hideCompleted: boolean,
+  ): Promise<Task[]> {
+    const transaction = this.database.transaction("tasks", "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("tasks");
+    let changed: Task[] = [];
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const all: Task[] = request.result;
+      const task = all.find((entry) => entry.id === id);
+      const target = all.find((entry) => entry.id === targetId);
+      if (
+        !task ||
+        !target ||
+        !samePlacement(task.placement, target.placement) ||
+        (hideCompleted && (task.completed || target.completed))
+      ) {
+        transaction.abort();
+        return;
+      }
+      const container = all
+        .filter((entry) => samePlacement(entry.placement, task.placement))
+        .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+      const visible = container.filter(
+        (entry) => !hideCompleted || !entry.completed,
+      );
+      const slots = visible.map((entry) => entry.order);
+      const reordered = visible.filter((entry) => entry.id !== id);
+      const index = reordered.findIndex((entry) => entry.id === targetId);
+      if (id === targetId) return;
+      reordered.splice(index + (position === "after" ? 1 : 0), 0, task);
+      changed = reordered.map((entry, index) => ({
+        ...entry,
+        order: slots[index],
+      }));
+      changed.forEach((entry) => store.put(entry));
+    };
+    await done;
+    return changed;
   }
 
   async deleteTask(id: string): Promise<void> {

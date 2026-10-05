@@ -44,9 +44,13 @@ test("отменённая транзакция списка и задачи н�
   await expect(input).toHaveValue("Несохранённая идея");
   await expect(list.getByRole("listitem")).toHaveCount(0);
   await input.press("Enter");
-  await expect(list.getByRole("listitem")).toHaveText("Несохранённая идея");
+  await expect(list.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Несохранённая идея",
+  );
   await page.reload();
-  await expect(list.getByRole("listitem")).toHaveText("Несохранённая идея");
+  await expect(list.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Несохранённая идея",
+  );
 });
 
 test("списки и действия доступны на экране 360px без горизонтальной прокрутки", async ({

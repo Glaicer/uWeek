@@ -21,7 +21,7 @@ for (const width of [360, 1200]) {
     await input.fill(title);
     await input.press("Enter");
     const task = days.first().getByRole("listitem");
-    await expect(task).toHaveText(title);
+    await expect(task.locator(".task-title")).toHaveText(title);
     const dimensions = await page.evaluate(() => ({
       scroll: document.documentElement.scrollWidth,
       width: window.innerWidth,
@@ -37,7 +37,9 @@ for (const width of [360, 1200]) {
       expect(last.x).toBe(first.x);
       expect(last.y).toBeGreaterThan(first.y);
     }
-    for (const control of await page.locator("input, button").all()) {
+    for (const control of await page
+      .locator("input:visible, button:visible")
+      .all()) {
       const box = (await control.boundingBox())!;
       expect(box.height).toBeGreaterThanOrEqual(44);
       expect(box.width).toBeGreaterThanOrEqual(44);

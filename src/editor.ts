@@ -3,14 +3,23 @@ import { taskColors, type Task, type TaskColor, type TaskEdits } from "./model";
 export interface TaskActions {
   updateTask: (id: string, edits: Partial<TaskEdits>) => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
+  readLists: () => Promise<import("./model").SomedayList[]>;
+  taskChanges: EventTarget;
+  reorderTask: (
+    id: string,
+    targetId: string,
+    position: "before" | "after",
+    hideCompleted: boolean,
+  ) => Promise<Task[]>;
 }
 
-export function openTaskEditor(
+export async function openTaskEditor(
   task: Task,
   trigger: HTMLElement,
   actions: TaskActions,
   changed: (task: Task | null) => void,
-): void {
+): Promise<void> {
+  const lists = await actions.readLists();
   const dialog = document.createElement("dialog");
   dialog.className = "task-editor";
   dialog.setAttribute("aria-labelledby", "editor-title");
@@ -21,6 +30,9 @@ export function openTaskEditor(
       <label>Заметка<textarea name="notes" rows="7"></textarea></label>
       <label>Цвет<select name="color"><option value="">Без цвета</option></select></label>
       <label class="check-label"><input name="completed" type="checkbox">Выполнена</label>
+      <label>Размещение<select name="placement" aria-label="Размещение"><option value="date">Дата</option><option value="list">Когда-нибудь</option></select></label>
+      <label>Дата задачи<input name="date" type="date"></label>
+      <label>Список задачи<select name="listId" aria-label="Список задачи"></select></label>
       <section aria-labelledby="checklist-title">
         <h3 id="checklist-title">Чек-лист</h3>
         <ol class="checklist"></ol>
@@ -35,6 +47,21 @@ export function openTaskEditor(
   const color = form.elements.namedItem("color") as HTMLSelectElement;
   const completed = form.elements.namedItem("completed") as HTMLInputElement;
   const alert = dialog.querySelector<HTMLElement>('[role="alert"]')!;
+  const placement = form.elements.namedItem("placement") as HTMLSelectElement;
+  const date = form.elements.namedItem("date") as HTMLInputElement;
+  const listId = form.elements.namedItem("listId") as HTMLSelectElement;
+  for (const list of lists) listId.add(new Option(list.title, list.id));
+  placement.value = task.placement.date ? "date" : "list";
+  date.value = task.placement.date ?? "";
+  if (task.placement.listId) listId.value = task.placement.listId;
+  const placementFields = () => {
+    date.closest("label")!.hidden = placement.value !== "date";
+    date.required = placement.value === "date";
+    listId.closest("label")!.hidden = placement.value !== "list";
+    listId.required = placement.value === "list";
+  };
+  placement.addEventListener("change", placementFields);
+  placementFields();
   for (const [value, label] of Object.entries(taskColors)) {
     color.add(new Option(label, value));
   }
@@ -131,6 +158,10 @@ export function openTaskEditor(
     notes: notes.value,
     color: (color.value || undefined) as TaskColor | undefined,
     completed: completed.checked,
+    placement:
+      placement.value === "date"
+        ? { date: date.value }
+        : { listId: listId.value },
     ...(task.checklist !== undefined || checklist.length ? { checklist } : {}),
   });
   const initial = JSON.stringify(draft());
@@ -138,7 +169,12 @@ export function openTaskEditor(
   const close = () => {
     dialog.close();
     dialog.remove();
-    if (trigger.isConnected && !trigger.closest("[hidden]")) trigger.focus();
+    const current = document.querySelector<HTMLElement>(
+      `[data-task-id="${task.id}"]:not([hidden]) .task-title`,
+    );
+    if (current) current.focus();
+    else if (trigger.isConnected && !trigger.closest("[hidden]"))
+      trigger.focus();
     else
       document
         .querySelector<HTMLInputElement>(".hide-completed input")

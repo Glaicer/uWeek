@@ -20,7 +20,9 @@ test("навигация сохраняет выбранную неделю и �
     "28 сентября 2026 – 4 октября 2026",
   );
   await page.getByRole("button", { name: "Следующая неделя" }).click();
-  await expect(page.getByRole("listitem")).toHaveText("План на понедельник");
+  await expect(page.getByRole("listitem").locator(".task-title")).toHaveText(
+    "План на понедельник",
+  );
 });
 
 test("начало недели сохраняется, даты переходят через год, високосный день и 2040", async ({
