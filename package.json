@@ -1,0 +1,29 @@
+{
+  "name": "yourweek",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check src tests *.json *.ts *.mjs index.html README.md",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "26.6.4",
+    "eslint": "10.12.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0",
+    "vite": "8.3.2"
+  }
+}
