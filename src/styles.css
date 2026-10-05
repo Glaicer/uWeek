@@ -114,7 +114,12 @@ button:disabled {
   gap: 24px;
 }
 .lists section {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border-top: 1px solid #dce2d8;
+}
+.lists form[hidden] {
+  display: none;
 }
 @media (min-width: 1200px) {
   .week {
