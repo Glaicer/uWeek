@@ -21,6 +21,11 @@ export function openTaskEditor(
       <label>Заметка<textarea name="notes" rows="7"></textarea></label>
       <label>Цвет<select name="color"><option value="">Без цвета</option></select></label>
       <label class="check-label"><input name="completed" type="checkbox">Выполнена</label>
+      <section aria-labelledby="checklist-title">
+        <h3 id="checklist-title">Чек-лист</h3>
+        <ol class="checklist"></ol>
+        <button type="button" data-add-item>Добавить пункт</button>
+      </section>
       <p role="alert"></p>
       <div class="editor-actions"><button type="submit">Сохранить</button><button type="button" data-cancel>Отмена</button><button type="button" data-delete>Удалить задачу</button></div>
     </form>`;
@@ -37,11 +42,96 @@ export function openTaskEditor(
   notes.value = task.notes ?? "";
   color.value = task.color ?? "";
   completed.checked = task.completed;
+  const checklist = (task.checklist ?? [])
+    .map((item) => ({ ...item }))
+    .sort((a, b) => a.order - b.order);
+  const list = dialog.querySelector<HTMLOListElement>(".checklist")!;
+  const renderChecklist = () => {
+    list.replaceChildren();
+    checklist.forEach((item, index) => {
+      const row = document.createElement("li");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = item.completed;
+      checkbox.setAttribute("aria-label", `Выполнен пункт ${index + 1}`);
+      checkbox.addEventListener("change", () => {
+        item.completed = checkbox.checked;
+      });
+      const text = document.createElement("textarea");
+      text.id = `checklist-${item.id}`;
+      text.rows = Math.max(2, item.text.split("\n").length);
+      text.required = true;
+      text.value = item.text;
+      text.setAttribute("aria-label", `Текст пункта ${index + 1}`);
+      text.addEventListener("input", () => {
+        item.text = text.value;
+      });
+      const actions = document.createElement("div");
+      actions.className = "editor-actions";
+      for (const [label, offset] of [
+        ["вверх", -1],
+        ["вниз", 1],
+      ] as const) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label === "вверх" ? "Вверх" : "Вниз";
+        button.setAttribute(
+          "aria-label",
+          `Переместить пункт ${index + 1} ${label}`,
+        );
+        button.addEventListener("click", () => {
+          const target = index + offset;
+          if (target < 0 || target >= checklist.length) return;
+          [checklist[index], checklist[target]] = [
+            checklist[target],
+            checklist[index],
+          ];
+          checklist.forEach((entry, order) => {
+            entry.order = order;
+          });
+          renderChecklist();
+          const buttons = list.children[target].querySelectorAll("button");
+          buttons[offset === -1 ? 0 : 1].focus();
+        });
+        actions.append(button);
+      }
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Удалить пункт";
+      remove.setAttribute("aria-label", `Удалить пункт ${index + 1}`);
+      remove.addEventListener("click", () => {
+        checklist.splice(index, 1);
+        checklist.forEach((entry, order) => {
+          entry.order = order;
+        });
+        renderChecklist();
+        const next = list.children[Math.min(index, checklist.length - 1)];
+        if (next) next.querySelector("textarea")!.focus();
+        else
+          dialog.querySelector<HTMLButtonElement>("[data-add-item]")!.focus();
+      });
+      actions.append(remove);
+      row.append(checkbox, text, actions);
+      list.append(row);
+    });
+  };
+  renderChecklist();
+  dialog.querySelector("[data-add-item]")!.addEventListener("click", () => {
+    checklist.push({
+      id: crypto.randomUUID(),
+      text: "",
+      completed: false,
+      order: Math.max(-1, ...checklist.map((item) => item.order)) + 1,
+    });
+    renderChecklist();
+    list.lastElementChild!.querySelector("textarea")!.focus();
+  });
   const draft = (): TaskEdits => ({
     title: title.value,
     notes: notes.value,
     color: (color.value || undefined) as TaskColor | undefined,
     completed: completed.checked,
+    ...(task.checklist !== undefined || checklist.length ? { checklist } : {}),
   });
   const initial = JSON.stringify(draft());
   let busy = false;

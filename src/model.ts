@@ -11,7 +11,17 @@ export const taskColors = {
 } as const;
 
 export type TaskColor = keyof typeof taskColors;
-export type TaskEdits = Pick<Task, "title" | "notes" | "color" | "completed">;
+export type TaskEdits = Pick<
+  Task,
+  "title" | "notes" | "color" | "completed" | "checklist"
+>;
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  order: number;
+}
 
 export interface Task {
   id: string;
@@ -19,6 +29,7 @@ export interface Task {
   completed: boolean;
   notes?: string;
   color?: TaskColor;
+  checklist?: ChecklistItem[];
   placement: Placement;
   order: number;
 }
