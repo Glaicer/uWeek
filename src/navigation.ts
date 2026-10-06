@@ -2,6 +2,8 @@ import { renderBoard } from "./board";
 import { calendarDate, currentWeek } from "./calendar";
 import type { PlannerStorage } from "./storage";
 import { mountCsvImport } from "./import-ui";
+import { mountSearch } from "./search";
+import type { Task } from "./model";
 
 function localDate(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
@@ -17,6 +19,20 @@ export async function startNavigation(
   if (!savedWeek) await storage.saveSelectedWeek(calendarDate(selected));
   let settings = await storage.readSettings();
   async function render(): Promise<void> {
+    const taskActions = {
+      updateTask: (id: string, edits: Partial<import("./model").TaskEdits>) =>
+        storage.updateTask(id, edits),
+      deleteTask: (id: string) => storage.deleteTask(id),
+      readLists: () => storage.readLists(),
+      taskChanges: new EventTarget(),
+      reorderTask: (
+        id: string,
+        targetId: string,
+        position: "before" | "after",
+        hide: boolean,
+      ) => storage.reorderTask(id, targetId, position, hide),
+    };
+
     const days = currentWeek(selected, settings.weekStartsOn);
     const [tasks, lists, hideCompleted, listTasks] = await Promise.all([
       storage.readWeek(calendarDate(days[0]), calendarDate(days[6])),
@@ -40,12 +56,7 @@ export async function startNavigation(
         renameList: (id, title) => storage.renameList(id, title),
         deleteList: (id) => storage.deleteList(id),
         saveHideCompleted: (value) => storage.saveHideCompleted(value),
-        updateTask: (id, edits) => storage.updateTask(id, edits),
-        deleteTask: (id) => storage.deleteTask(id),
-        readLists: () => storage.readLists(),
-        taskChanges: new EventTarget(),
-        reorderTask: (id, targetId, position, hide) =>
-          storage.reorderTask(id, targetId, position, hide),
+        ...taskActions,
       },
     );
     const navigation = document.createElement("nav");
@@ -123,6 +134,27 @@ export async function startNavigation(
     navigation.append(startLabel);
     root.querySelector("header")!.append(navigation);
     mountCsvImport(root.querySelector("header")!, storage, render);
+    mountSearch(
+      root.querySelector("header")!,
+      storage,
+      taskActions,
+      render,
+      async (task: Task) => {
+        if (task.placement.date) {
+          await storage.saveSelectedWeek(task.placement.date);
+          selected = localDate(task.placement.date);
+        }
+        await render();
+        const target = root.querySelector<HTMLElement>(
+          `[data-task-id="${task.id}"]`,
+        );
+        if (target) {
+          target.hidden = false;
+          target.scrollIntoView({ block: "center" });
+          target.querySelector<HTMLButtonElement>(".task-title")?.focus();
+        }
+      },
+    );
   }
   async function change(date: Date, focus: string): Promise<void> {
     try {
