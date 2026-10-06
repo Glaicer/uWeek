@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trapTab } from "./trap-tab";
 import { flushSync } from "react-dom";
 import { prepareCsv, type CsvPreview } from "../src/csv";
 import type { PlannerStorage } from "../src/storage";
@@ -155,7 +156,7 @@ export function CsvImport({ storage, refresh, showStatus }: CsvImportProps) {
         />
       </label>
       {preview ? (
-        <dialog ref={dialogRef} aria-label="Импорт CSV">
+        <dialog ref={dialogRef} onKeyDown={trapTab} aria-label="Импорт CSV">
           <h2>Импорт CSV</h2>
           <p>{`Задач: ${preview.records.length}. Выполненных: ${preview.completed}. Невыполненных: ${preview.records.length - preview.completed}. Без даты: ${preview.undated}. Создаваемые списки: ${newListTitles.join(", ") || "нет"}. Пустых записей: ${preview.emptyRecords}. Точные повторные вхождения: ${preview.duplicateOccurrences}. Диапазон дат: ${preview.firstDate ?? "нет"} — ${preview.lastDate ?? "нет"}.`}</p>
           <p>{previewWarning}</p>

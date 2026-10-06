@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trapTab } from "./trap-tab";
 import { flushSync } from "react-dom";
 import { provideTaskEditor, type TaskActions } from "../src/editor";
 import { taskColors } from "../src/model";
@@ -244,24 +245,6 @@ function TaskEditorDialog(props: {
       dialog.current
         ?.querySelector<HTMLButtonElement>("[data-add-item]")
         ?.focus();
-  };
-
-  const trapTab = (event: React.KeyboardEvent<HTMLDialogElement>) => {
-    if (event.key !== "Tab") return;
-    const controls = Array.from(
-      dialog.current!.querySelectorAll<HTMLElement>(
-        "input:not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled)",
-      ),
-    );
-    const first = controls[0];
-    const last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
   };
 
   return (

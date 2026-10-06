@@ -10,6 +10,7 @@ import {
 import { createBackup, prepareBackup, type BackupV1 } from "../src/backup";
 import type { PlannerStorage } from "../src/storage";
 import { CsvImport } from "./csv-import";
+import { trapTab } from "./trap-tab";
 
 const warning =
   "Данные хранятся только в этом origin (адресе сайта) и профиле браузера. Очистка данных сайта, удаление профиля и приватный режим могут удалить план. Для переноса между устройствами скачайте и вручную перенесите копию. JSON содержит личные данные открытым текстом, без шифрования. Постоянное хранение не заменяет резервную копию.";
@@ -194,6 +195,7 @@ export function DataSection({
       {pending && (
         <dialog
           ref={dialogRef}
+          onKeyDown={trapTab}
           aria-label="Восстановление копии"
           onCancel={(event) => {
             event.preventDefault();
