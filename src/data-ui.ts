@@ -39,8 +39,11 @@ export function mountData(
   exportButton.addEventListener(
     "click",
     () =>
-      void download().catch(() => {
-        status().textContent = "Не удалось скачать копию. Повторите попытку.";
+      void download().catch((error) => {
+        status().textContent =
+          error instanceof Error
+            ? error.message
+            : "Не удалось скачать копию. Повторите попытку.";
       }),
   );
   const label = document.createElement("label");
@@ -99,8 +102,11 @@ export function mountData(
     current.addEventListener(
       "click",
       () =>
-        void download().catch(() => {
-          progress.textContent = "Не удалось скачать текущую копию.";
+        void download().catch((error) => {
+          progress.textContent =
+            error instanceof Error
+              ? error.message
+              : "Не удалось скачать текущую копию.";
         }),
     );
     const confirm = button("Заменить все данные");

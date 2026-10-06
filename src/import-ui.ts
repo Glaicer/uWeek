@@ -101,7 +101,7 @@ export function mountCsvImport(
       }
       close();
       host.querySelector<HTMLElement>(".feedback")!.textContent =
-        `Добавлено задач: ${result.addedTasks}. Пустых записей: ${result.emptyRecords}.${result.repeated ? " Этот файл уже импортирован." : ""}${viewError ? " Импорт сохранён, но доска не обновилась. Перезагрузите страницу." : ""}`;
+        `Добавлено задач: ${result.addedTasks}. Новых списков: ${result.addedLists}. Пустых записей: ${result.emptyRecords}.${result.repeated ? " Этот файл уже импортирован." : ""}${viewError ? " Импорт сохранён, но доска не обновилась. Перезагрузите страницу." : ""}`;
       host.querySelector<HTMLInputElement>('input[type="file"]')?.focus();
     });
     dialog.append(heading, summary, warning, list, progress, confirm, cancel);

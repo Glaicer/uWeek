@@ -227,3 +227,67 @@ test("undated confirmation reconciles prepared names with current lists and orde
     emptyRecords: 1,
   });
 });
+
+test("public storage rejects blank checklist drafts and shares creation defaults for days and lists", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    const storagePath = "/src/storage.ts";
+    const { PlannerStorage } = await import(storagePath);
+    const storage = await PlannerStorage.open();
+    const list = (await storage.readLists())[0];
+    const day = await storage.createTask("  Day  ", "2044-02-29");
+    const undated = await storage.createListTask("  Undated  ", list.id);
+    const second = await storage.createListTask("Second", list.id);
+    const errors = [];
+    for (const create of [
+      () => storage.createTask("  ", "2044-02-29"),
+      () => storage.createListTask("  ", list.id),
+    ]) {
+      try {
+        await create();
+      } catch (error) {
+        errors.push((error as Error).message);
+      }
+    }
+    try {
+      await storage.updateTask(day.id, {
+        notes: "Must not persist",
+        checklist: [{ id: "item", text: " \n\t ", completed: false, order: 0 }],
+      });
+    } catch (error) {
+      errors.push((error as Error).message);
+    }
+    return {
+      day,
+      undated,
+      second,
+      errors,
+      snapshot: await storage.readSnapshot(),
+    };
+  });
+  expect(result.day).toMatchObject({
+    title: "Day",
+    completed: false,
+    order: 0,
+    placement: { date: "2044-02-29" },
+  });
+  expect(result.undated).toMatchObject({
+    title: "Undated",
+    completed: false,
+    order: 0,
+  });
+  expect(result.second.order).toBe(1);
+  expect(result.errors).toEqual([
+    "Введите название задачи",
+    "Введите название задачи",
+    "Введите непустой текст пункта чек-листа",
+  ]);
+  expect(result.snapshot.tasks).toHaveLength(3);
+  expect(
+    result.snapshot.tasks.find(
+      (task: { id: string }) => task.id === result.day.id,
+    ),
+  ).toEqual(result.day);
+});

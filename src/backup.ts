@@ -143,7 +143,6 @@ export function validateBackup(value: unknown): BackupV1 {
     if (Object.hasOwn(placement, "date")) {
       requireValid(
         typeof placement.date === "string" &&
-          !placement.date.startsWith("0000") &&
           validPlacement({ date: placement.date }),
       );
       container = `date:${placement.date}`;
@@ -192,7 +191,6 @@ export function validateBackup(value: unknown): BackupV1 {
       requireValid(
         fields.Date === "" ||
           (typeof fields.Date === "string" &&
-            !fields.Date.startsWith("0000") &&
             validPlacement({ date: fields.Date })),
       );
       requireValid(
@@ -214,11 +212,21 @@ export function validateBackup(value: unknown): BackupV1 {
 }
 
 export function createBackup(snapshot: PlannerSnapshot): BackupV1 {
+  const tasks = snapshot.tasks.map((task) => {
+    const emptyItem = task.checklist?.findIndex((item) => !item.text.trim());
+    if (emptyItem !== undefined && emptyItem !== -1)
+      throw new Error(
+        `Копия не скачана: задача «${task.title}», пункт ${emptyItem + 1} содержит пустой текст. Откройте редактор и заполните или удалите этот пункт. Данные не изменены.`,
+      );
+    const copy = { ...task };
+    if (copy.color === undefined) delete copy.color;
+    return copy;
+  });
   return validateBackup({
     format: "yourweek-backup",
     version: 1,
     exportedAt: new Date().toISOString(),
-    tasks: snapshot.tasks,
+    tasks,
     lists: snapshot.lists,
     settings: { ...snapshot.settings, hideCompleted: snapshot.hideCompleted },
     importHistory: snapshot.importHistory,
