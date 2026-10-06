@@ -58,3 +58,50 @@ test("задачи без даты используют быстрый ввод,
   await editor.getByRole("button", { name: "Удалить задачу" }).click();
   await expect(inbox.getByRole("listitem")).toHaveCount(1);
 });
+
+test("переименование и удаление других списков не сбрасывают черновики быстрого ввода", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const personal = page.getByRole("region", {
+    name: "Список: Личное",
+    exact: true,
+  });
+  const draft = personal.getByRole("textbox", {
+    name: "Новая задача: Личное",
+  });
+  await draft.fill("Черновик переживает списки");
+  const inbox = page.getByRole("region", {
+    name: "Список: Входящие",
+    exact: true,
+  });
+  await inbox.getByRole("button", { name: "Переименовать список" }).click();
+  const renameInput = inbox.getByRole("textbox", {
+    name: "Название списка",
+    exact: true,
+  });
+  await renameInput.fill("Первичное");
+  await inbox.getByRole("button", { name: "Сохранить название" }).click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Название списка сохранено",
+  );
+  await expect(draft).toHaveValue("Черновик переживает списки");
+  const create = page.getByRole("textbox", { name: "Название нового списка" });
+  await create.fill("Временный");
+  await create.press("Enter");
+  await expect(page.getByRole("status")).toHaveText("Список сохранён");
+  await page
+    .getByRole("region", { name: "Список: Временный", exact: true })
+    .getByRole("button", { name: "Удалить список", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toHaveText("Список удалён");
+  await expect(
+    page.getByRole("region", { name: "Список: Временный", exact: true }),
+  ).toHaveCount(0);
+  await expect(draft).toHaveValue("Черновик переживает списки");
+  await draft.press("Enter");
+  await expect(page.getByRole("status")).toHaveText("Задача сохранена");
+  await expect(
+    personal.getByRole("listitem").locator(".task-title"),
+  ).toHaveText("Черновик переживает списки");
+});
