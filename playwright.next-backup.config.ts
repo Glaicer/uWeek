@@ -6,12 +6,12 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: ["next-backup*.spec.ts"],
   timeout: 120_000,
-  use: { baseURL: "http://127.0.0.1:4212", timezoneId: "Europe/Moscow" },
+  use: { baseURL: "http://127.0.0.1:4213", timezoneId: "Europe/Moscow" },
   webServer: [
     {
       command:
-        "pnpm build:next && pnpm exec next start --hostname 127.0.0.1 --port 4212",
-      url: "http://127.0.0.1:4212",
+        "pnpm build:next && pnpm exec next start --hostname 127.0.0.1 --port 4213",
+      url: "http://127.0.0.1:4213",
       reuseExistingServer: false,
       env: { NEXT_TELEMETRY_DISABLED: "1" },
       timeout: 180_000,
