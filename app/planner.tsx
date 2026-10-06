@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calendarDate, currentWeek, formatDate } from "../src/calendar";
 import type { TaskActions } from "../src/editor";
 import { startOfflineShell } from "../src/offline";
-import { mountSearch } from "../src/search";
 import type {
   PlannerSettings,
   SomedayList,
@@ -15,6 +14,7 @@ import type {
 import { PlannerStorage } from "../src/storage";
 import { DataSection } from "./data-section";
 import { DaySection } from "./day-section";
+import { Search } from "./search";
 import { SomedaySection } from "./someday-section";
 import { TaskEditor } from "./task-editor";
 import { WeekNavigation } from "./week-navigation";
@@ -53,7 +53,6 @@ export function Planner() {
   const listTasksRef = useRef<Task[]>([]);
   const generationRef = useRef(0);
   const mainRef = useRef<HTMLElement>(null);
-  const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
 
@@ -407,22 +406,6 @@ export function Planner() {
     return () => taskChangesBus.removeEventListener("tasks", listener);
   }, [putListTasks, putWeekTasks]);
 
-  useEffect(() => {
-    if (phase !== "ready") return;
-    const header = headerRef.current;
-    if (!header) return;
-    mountSearch(
-      header,
-      storageRef.current!,
-      taskActions,
-      refreshBoard,
-      goToTask,
-    );
-    return () => {
-      header.querySelector("[data-search-trigger]")?.remove();
-    };
-  }, [goToTask, phase, refreshBoard, taskActions]);
-
   if (phase === "loading") {
     return (
       <main id="app">
@@ -453,7 +436,7 @@ export function Planner() {
 
   return (
     <main id="app" ref={mainRef}>
-      <header ref={headerRef}>
+      <header>
         <p className="brand">YourWeek</p>
         <h1>
           {formatDate(days[0])} – {formatDate(days[6])}
@@ -465,6 +448,14 @@ export function Planner() {
           onChange={(date, focus) => void change(date, focus)}
           onWeekStart={(value, select) => void onWeekStart(value, select)}
         />
+        {storage ? (
+          <Search
+            storage={storage}
+            actions={taskActions}
+            refreshBoard={refreshBoard}
+            goToTask={goToTask}
+          />
+        ) : null}
       </header>
       <aside aria-label="Хранение данных">
         <strong>Ваши данные остаются в этом браузере.</strong> Облачной
