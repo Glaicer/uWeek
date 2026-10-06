@@ -15,6 +15,22 @@ import { calendarDate } from "./calendar";
 const databaseName = "yourweek";
 const schemaVersion = 3;
 
+function newTask(
+  title: string,
+  placement: Task["placement"],
+  tasks: Task[],
+): Task {
+  const trimmedTitle = title.trim();
+  if (!trimmedTitle) throw new Error("Введите название задачи");
+  return {
+    id: crypto.randomUUID(),
+    title: trimmedTitle,
+    completed: false,
+    placement,
+    order: Math.max(-1, ...tasks.map((task) => task.order)) + 1,
+  };
+}
+
 function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
@@ -153,9 +169,12 @@ export class PlannerStorage {
     return history;
   }
 
-  async commitCsv(
-    preview: CsvPreview,
-  ): Promise<{ addedTasks: number; emptyRecords: number; repeated: boolean }> {
+  async commitCsv(preview: CsvPreview): Promise<{
+    addedTasks: number;
+    addedLists: number;
+    emptyRecords: number;
+    repeated: boolean;
+  }> {
     const tasks: Task[] = preview.records.map((record) => ({
       id: crypto.randomUUID(),
       title: record.title,
@@ -183,6 +202,7 @@ export class PlannerStorage {
     const store = transaction.objectStore("tasks");
     const histories = transaction.objectStore("importHistory");
     let repeated = false;
+    let addedLists = 0;
     const check = histories.get(preview.fingerprint);
     check.onsuccess = () => {
       if (check.result) {
@@ -212,6 +232,7 @@ export class PlannerStorage {
                 };
                 lists.push(list);
                 listStore.add(list);
+                addedLists++;
               }
               destinations.set(key, list.id);
             }
@@ -250,6 +271,7 @@ export class PlannerStorage {
     await done;
     return {
       addedTasks: repeated ? 0 : tasks.length,
+      addedLists,
       emptyRecords: preview.emptyRecords,
       repeated,
     };
@@ -416,8 +438,6 @@ export class PlannerStorage {
   }
 
   async createListTask(title: string, listId: string): Promise<Task> {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) throw new Error("Введите название задачи");
     const transaction = this.database.transaction(
       ["tasks", "lists"],
       "readwrite",
@@ -425,6 +445,7 @@ export class PlannerStorage {
     const done = transactionDone(transaction);
     const store = transaction.objectStore("tasks");
     let task: Task;
+    let error: unknown;
     const list = transaction.objectStore("lists").get(listId);
     list.onsuccess = () => {
       if (!list.result) {
@@ -436,41 +457,45 @@ export class PlannerStorage {
         const tasks = (request.result as Task[]).filter(
           (task) => task.placement.listId === listId,
         );
-        task = {
-          id: crypto.randomUUID(),
-          title: trimmedTitle,
-          completed: false,
-          placement: { listId },
-          order: Math.max(-1, ...tasks.map((task) => task.order)) + 1,
-        };
-        store.add(task);
+        try {
+          task = newTask(title, { listId }, tasks);
+          store.add(task);
+        } catch (failure) {
+          error = failure;
+          transaction.abort();
+        }
       };
     };
-    await done;
+    try {
+      await done;
+    } catch (failure) {
+      throw error ?? failure;
+    }
     return task!;
   }
 
   async createTask(title: string, date: string): Promise<Task> {
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) throw new Error("Введите название задачи");
     const transaction = this.database.transaction("tasks", "readwrite");
     const done = transactionDone(transaction);
     const store = transaction.objectStore("tasks");
     return new Promise<Task>((resolve, reject) => {
       const request = store.index("date").getAll(date);
       let task: Task;
+      let error: unknown;
       request.onsuccess = () => {
         const tasks: Task[] = request.result;
-        task = {
-          id: crypto.randomUUID(),
-          title: trimmedTitle,
-          completed: false,
-          placement: { date },
-          order: Math.max(-1, ...tasks.map((task) => task.order)) + 1,
-        };
-        store.add(task);
+        try {
+          task = newTask(title, { date }, tasks);
+          store.add(task);
+        } catch (failure) {
+          error = failure;
+          transaction.abort();
+        }
       };
-      done.then(() => resolve(task), reject);
+      done.then(
+        () => resolve(task),
+        (failure) => reject(error ?? failure),
+      );
     });
   }
   async updateTask(id: string, edits: Partial<TaskEdits>): Promise<Task> {
@@ -479,6 +504,9 @@ export class PlannerStorage {
     }
     if (edits.color !== undefined && !Object.hasOwn(taskColors, edits.color)) {
       throw new Error("Выберите цвет из палитры");
+    }
+    if (edits.checklist?.some((item) => !item.text.trim())) {
+      throw new Error("Введите непустой текст пункта чек-листа");
     }
     const transaction = this.database.transaction(
       ["tasks", "lists"],
@@ -500,6 +528,7 @@ export class PlannerStorage {
         all.onsuccess = () => {
           task = { ...existing, ...edits };
           if (edits.title !== undefined) task.title = edits.title.trim();
+          if (task.color === undefined) delete task.color;
           if (!samePlacement(placement, existing.placement)) {
             const container = (all.result as Task[]).filter((entry) =>
               samePlacement(entry.placement, placement),

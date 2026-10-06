@@ -244,6 +244,12 @@ export async function openTaskEditor(
       title.focus();
       return;
     }
+    const emptyItem = checklist.findIndex((item) => !item.text.trim());
+    if (emptyItem !== -1) {
+      alert.textContent = "Введите непустой текст пункта чек-листа";
+      list.children[emptyItem].querySelector("textarea")!.focus();
+      return;
+    }
     void save(false);
   });
   dialog.querySelector("[data-delete]")!.addEventListener("click", () => {

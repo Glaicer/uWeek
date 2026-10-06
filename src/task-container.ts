@@ -135,6 +135,7 @@ export function renderTaskContainer(
       const target = visible[index + offset];
       button.disabled = !target || index === -1;
       button.addEventListener("click", async () => {
+        const wasFocused = document.activeElement === button;
         button.disabled = true;
         try {
           publish(
@@ -145,9 +146,20 @@ export function renderTaskContainer(
               filter.checked,
             ),
           );
+          if (wasFocused) {
+            const row = list.querySelector<HTMLElement>(
+              `[data-task-id="${task.id}"]`,
+            );
+            const control = row?.querySelector<HTMLButtonElement>(
+              `[data-direction="${position}"]`,
+            );
+            if (control && !control.disabled) control.focus();
+            else row?.querySelector<HTMLButtonElement>(".task-title")?.focus();
+          }
           status.textContent = "Порядок сохранён";
         } catch {
           button.disabled = false;
+          if (wasFocused) button.focus();
           status.textContent = "Порядок не сохранён. Повторите действие.";
         }
       });
