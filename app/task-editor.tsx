@@ -17,6 +17,7 @@ interface TaskEditorRequest {
   trigger: HTMLElement;
   actions: TaskActions;
   changed: (task: Task | null) => void;
+  lists: SomedayList[];
 }
 
 const saveFailure =
@@ -33,10 +34,17 @@ export function TaskEditor() {
       actions: TaskActions,
       changed: (task: Task | null) => void,
     ) => {
-      const request: TaskEditorRequest = { task, trigger, actions, changed };
-      return new Promise<void>((resolve) => {
-        opened.current = resolve;
-        setRequest(request);
+      return new Promise<void>((resolve, reject) => {
+        void actions.readLists().then(
+          (lists) => {
+            opened.current = () => {
+              opened.current = null;
+              resolve();
+            };
+            setRequest({ task, trigger, actions, changed, lists });
+          },
+          () => reject(new Error("Редактор недоступен. Повторите действие.")),
+        );
       });
     },
     [],
@@ -70,7 +78,7 @@ function TaskEditorDialog(props: {
   onOpened: () => void;
   onClose: () => void;
 }) {
-  const { task, actions } = props.request;
+  const { task, actions, lists } = props.request;
   const { onOpened } = props;
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
@@ -86,7 +94,6 @@ function TaskEditorDialog(props: {
   );
   const [date, setDate] = useState(task.placement.date ?? "");
   const [listId, setListId] = useState(task.placement.listId ?? "");
-  const [lists, setLists] = useState<SomedayList[] | null>(null);
   const [alert, setAlert] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -106,27 +113,12 @@ function TaskEditorDialog(props: {
       placement:
         placement === "date"
           ? { date }
-          : { listId: listId || lists?.[0]?.id || "" },
+          : { listId: listId || lists[0]?.id || "" },
       ...(task.checklist !== undefined || items.length
         ? { checklist: items.map((item) => ({ ...item })) }
         : {}),
     };
   }
-
-  useEffect(() => {
-    let stale = false;
-    actions
-      .readLists()
-      .then((next) => {
-        if (!stale) setLists(next);
-      })
-      .catch(() => {
-        if (!stale) setAlert("Редактор не открыт. Повторите действие.");
-      });
-    return () => {
-      stale = true;
-    };
-  }, [actions]);
 
   useEffect(() => {
     const element = dialog.current;
@@ -362,12 +354,12 @@ function TaskEditorDialog(props: {
             ref={listSelect}
             id="editor-list"
             name="listId"
-            value={listId || lists?.[0]?.id || ""}
+            value={listId || lists[0]?.id || ""}
             required={placement === "list"}
             disabled={busy}
             onChange={(event) => setListId(event.target.value)}
           >
-            {(lists ?? []).map((list) => (
+            {lists.map((list) => (
               <option key={list.id} value={list.id}>
                 {list.title}
               </option>

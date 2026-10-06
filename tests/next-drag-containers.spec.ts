@@ -142,3 +142,29 @@ test("Escape and an outside drop do not change placement, order or saved state",
     await expect(destination.locator(".task-title")).toHaveCount(0);
   }
 });
+
+test("cross-container commit updates source and destination without resetting foreign drafts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 1400 });
+  await page.goto("/");
+  const day = page.locator(".day").first();
+  const personal = page.getByRole("region", {
+    name: "Список: Личное",
+    exact: true,
+  });
+  await add(page, day, ["Перенос"]);
+  const foreign = page
+    .locator(".day")
+    .nth(1)
+    .getByRole("textbox", { name: /Новая задача/ });
+  await foreign.fill("Чужой черновик");
+  await drop(
+    page,
+    day.getByRole("button", { name: "Перенос", exact: true }),
+    personal.getByRole("heading"),
+  );
+  await expect(personal.locator(".task-title")).toHaveText(["Перенос"]);
+  await expect(day.locator(".task-title")).toHaveCount(0);
+  await expect(foreign).toHaveValue("Чужой черновик");
+});
