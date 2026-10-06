@@ -8,8 +8,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createBackup, prepareBackup, type BackupV1 } from "../src/backup";
-import { mountCsvImport } from "../src/import-ui";
 import type { PlannerStorage } from "../src/storage";
+import { CsvImport } from "./csv-import";
 
 const warning =
   "Данные хранятся только в этом origin (адресе сайта) и профиле браузера. Очистка данных сайта, удаление профиля и приватный режим могут удалить план. Для переноса между устройствами скачайте и вручную перенесите копию. JSON содержит личные данные открытым текстом, без шифрования. Постоянное хранение не заменяет резервную копию.";
@@ -46,8 +46,6 @@ export function DataSection({
   restored,
   showStatus,
 }: DataSectionProps) {
-  const sectionRef = useRef<HTMLElement>(null);
-  const slotRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -77,19 +75,6 @@ export function DataSection({
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, [storage]);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    const slot = slotRef.current;
-    if (!section || !slot) return;
-    const before = section.lastElementChild;
-    mountCsvImport(section, storage, refresh);
-    const appended = section.lastElementChild;
-    if (appended && appended !== before) slot.append(appended);
-    return () => {
-      slot.replaceChildren();
-    };
-  }, [storage, refresh]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -173,10 +158,10 @@ export function DataSection({
   };
 
   return (
-    <section aria-label="Данные" ref={sectionRef}>
+    <section aria-label="Данные">
       <h2>Данные</h2>
       <p>{warning}</p>
-      <div data-import-slot="" ref={slotRef} />
+      <CsvImport storage={storage} refresh={refresh} showStatus={showStatus} />
       <button
         type="button"
         onClick={() =>
