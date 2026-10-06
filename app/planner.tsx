@@ -18,6 +18,7 @@ import { DaySection } from "./day-section";
 import { SomedaySection } from "./someday-section";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
+import { TaskEditor } from "./task-editor";
 
 const bootStatus = "Загрузка планера…";
 const bootError =
@@ -90,8 +91,10 @@ export function Planner() {
 
   const removeTask = useCallback(
     (id: string) => {
-      putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
-      putListTasks(listTasksRef.current.filter((task) => task.id !== id));
+      flushSync(() => {
+        putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
+        putListTasks(listTasksRef.current.filter((task) => task.id !== id));
+      });
     },
     [putListTasks, putWeekTasks],
   );
@@ -537,6 +540,7 @@ export function Planner() {
             csvHost.section,
           )
         : null}
+      <TaskEditor />
     </main>
   );
 }

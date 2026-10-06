@@ -17,6 +17,7 @@
     "typecheck": "NEXT_TELEMETRY_DISABLED=1 next typegen && tsc --noEmit",
     "test:offline": "playwright test --config playwright.offline.config.ts",
     "test:next-board": "playwright test --config playwright.next-board.config.ts",
+    "test:next-editor": "playwright test --config playwright.next-editor.config.ts",
     "test:next-lists": "playwright test --config playwright.next-lists.config.ts",
     "test:next-csv": "playwright test --config playwright.next-csv.config.ts",
     "lint": "eslint .",

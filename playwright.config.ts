@@ -9,6 +9,7 @@ export default defineConfig({
     "next-launch.spec.ts",
     "next-launch-strict-mode.spec.ts",
     "next-*.spec.ts",
+    "*-next.spec.ts",
   ],
   use: { baseURL: "http://127.0.0.1:4171", timezoneId: "Europe/Moscow" },
   webServer: {
