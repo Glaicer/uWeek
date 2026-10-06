@@ -65,6 +65,7 @@ function TaskEditorDialog(props: {
   onClose: () => void;
 }) {
   const { task, actions } = props.request;
+  const { onOpened } = props;
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? "");
   const [color, setColor] = useState<TaskColor | "">(task.color ?? "");
@@ -93,8 +94,6 @@ function TaskEditorDialog(props: {
         : {}),
     };
   }
-
-  const { onOpened } = props;
 
   useEffect(() => {
     const element = dialog.current;
@@ -256,32 +255,30 @@ function TaskEditorDialog(props: {
             onChange={(event) => setTitle(event.target.value)}
           />
         </label>
-        <label>
-          Заметка
-          <textarea
-            name="notes"
-            rows={7}
-            value={notes}
-            disabled={busy}
-            onChange={(event) => setNotes(event.target.value)}
-          />
-        </label>
-        <label>
-          Цвет
-          <select
-            name="color"
-            value={color}
-            disabled={busy}
-            onChange={(event) => setColor(event.target.value as TaskColor | "")}
-          >
-            <option value="">Без цвета</option>
-            {Object.entries(taskColors).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <label htmlFor="editor-notes">Заметка</label>
+        <textarea
+          id="editor-notes"
+          name="notes"
+          rows={7}
+          value={notes}
+          disabled={busy}
+          onChange={(event) => setNotes(event.target.value)}
+        />
+        <label htmlFor="editor-color">Цвет</label>
+        <select
+          id="editor-color"
+          name="color"
+          value={color}
+          disabled={busy}
+          onChange={(event) => setColor(event.target.value as TaskColor | "")}
+        >
+          <option value="">Без цвета</option>
+          {Object.entries(taskColors).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
         <label className="check-label">
           <input
             name="completed"
