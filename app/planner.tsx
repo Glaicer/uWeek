@@ -4,7 +4,6 @@ import { createPortal, flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calendarDate, currentWeek, formatDate } from "../src/calendar";
 import { mountData } from "../src/data-ui";
-import { renderLists, type ListActions } from "../src/lists";
 import type { TaskActions } from "../src/editor";
 import { mountSearch } from "../src/search";
 import type {
@@ -16,6 +15,7 @@ import type {
 import { PlannerStorage } from "../src/storage";
 import { CsvImport } from "./csv-import";
 import { DaySection } from "./day-section";
+import { SomedaySection } from "./someday-section";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
 
@@ -44,6 +44,7 @@ export function Planner() {
   const [settings, setSettings] = useState<PlannerSettings | null>(null);
   const [weekTasks, setWeekTasks] = useState<Task[]>([]);
   const [lists, setLists] = useState<SomedayList[]>([]);
+  const [listTasks, setListTasks] = useState<Task[]>([]);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set());
   const [csvHost, setCsvHost] = useState<CsvHost | null>(null);
@@ -59,7 +60,6 @@ export function Planner() {
   const headerRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
-  const somedayRef = useRef<HTMLElement>(null);
 
   const showStatus = useCallback((text: string) => {
     if (statusRef.current) statusRef.current.textContent = text;
@@ -83,14 +83,17 @@ export function Planner() {
     setLists(next);
   }, []);
 
+  const putListTasks = useCallback((tasks: Task[]) => {
+    listTasksRef.current = tasks;
+    setListTasks(tasks);
+  }, []);
+
   const removeTask = useCallback(
     (id: string) => {
       putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
-      listTasksRef.current = listTasksRef.current.filter(
-        (task) => task.id !== id,
-      );
+      putListTasks(listTasksRef.current.filter((task) => task.id !== id));
     },
-    [putWeekTasks],
+    [putListTasks, putWeekTasks],
   );
 
   const refreshTo = useCallback(
@@ -115,7 +118,7 @@ export function Planner() {
           putWeekTasks(tasks);
           putLists(nextLists);
           setHideCompleted(nextHide);
-          listTasksRef.current = nextListTasks;
+          putListTasks(nextListTasks);
         });
         return true;
       } catch (error) {
@@ -123,7 +126,7 @@ export function Planner() {
         throw error;
       }
     },
-    [putLists, putWeekTasks],
+    [putListTasks, putLists, putWeekTasks],
   );
 
   const change = useCallback(
@@ -285,6 +288,42 @@ export function Planner() {
     return opened.createTask(title, date);
   }, []);
 
+  const createListTask = useCallback(async (title: string, listId: string) => {
+    const opened = storageRef.current;
+    if (!opened) throw new Error("Хранилище закрыто");
+    return opened.createListTask(title, listId);
+  }, []);
+
+  const createList = useCallback(
+    async (title: string) => {
+      const opened = storageRef.current;
+      if (!opened) throw new Error("Хранилище закрыто");
+      const created = await opened.createList(title);
+      putLists([...listsRef.current, created]);
+    },
+    [putLists],
+  );
+
+  const renameList = useCallback(
+    async (id: string, title: string) => {
+      const opened = storageRef.current;
+      if (!opened) throw new Error("Хранилище закрыто");
+      const saved = await opened.renameList(id, title);
+      putLists(listsRef.current.map((list) => (list.id === id ? saved : list)));
+    },
+    [putLists],
+  );
+
+  const deleteList = useCallback(
+    async (id: string) => {
+      const opened = storageRef.current;
+      if (!opened) throw new Error("Хранилище закрыто");
+      await opened.deleteList(id);
+      putLists(listsRef.current.filter((list) => list.id !== id));
+    },
+    [putLists],
+  );
+
   useEffect(() => {
     let stale = false;
     void (async () => {
@@ -316,6 +355,7 @@ export function Planner() {
         setSettings(initialSettings);
         setWeekTasks(tasks);
         setLists(nextLists);
+        setListTasks(nextListTasks);
         setHideCompleted(nextHide);
         setPhase("ready");
       } catch {
@@ -351,16 +391,16 @@ export function Planner() {
             task.placement.date <= lastDate,
         ),
       ]);
-      listTasksRef.current = [
+      putListTasks([
         ...listTasksRef.current.filter(
           (task) => !changed.some((entry) => entry.id === task.id),
         ),
         ...changed.filter((task) => task.placement.listId !== undefined),
-      ];
+      ]);
     };
     taskChangesBus.addEventListener("tasks", listener);
     return () => taskChangesBus.removeEventListener("tasks", listener);
-  }, [putWeekTasks]);
+  }, [putListTasks, putWeekTasks]);
 
   useEffect(() => {
     if (phase !== "ready") return;
@@ -393,36 +433,6 @@ export function Planner() {
       setCsvHost(null);
     };
   }, [phase, refreshBoard, restored]);
-
-  const listSignature = lists.map((list) => list.id).join("\n");
-
-  useEffect(() => {
-    if (phase !== "ready") return;
-    const section = somedayRef.current;
-    if (!section) return;
-    const listActions: ListActions = {
-      ...taskActions,
-      listTasks: listTasksRef.current,
-      createListTask: (title, listId) =>
-        storageRef.current!.createListTask(title, listId),
-      createList: (title) => storageRef.current!.createList(title),
-      renameList: (id, title) => storageRef.current!.renameList(id, title),
-      deleteList: (id) => storageRef.current!.deleteList(id),
-    };
-    renderLists(
-      section,
-      listsRef.current,
-      listActions,
-      statusRef.current!,
-      filterRef.current!,
-    );
-    return () => {
-      section.querySelector(".lists")?.replaceChildren();
-      for (const form of section.querySelectorAll(":scope > form")) {
-        form.remove();
-      }
-    };
-  }, [listSignature, phase, taskActions]);
 
   if (phase === "loading") {
     return (
@@ -506,14 +516,17 @@ export function Planner() {
           );
         })}
       </div>
-      <section
-        className="someday"
-        aria-labelledby="someday-title"
-        ref={somedayRef}
-      >
-        <h2 id="someday-title">Когда-нибудь</h2>
-        <div className="lists" />
-      </section>
+      <SomedaySection
+        lists={lists}
+        listTasks={listTasks}
+        createListTask={createListTask}
+        createList={createList}
+        renameList={renameList}
+        deleteList={deleteList}
+        hideCompleted={hideCompleted}
+        revealed={revealed}
+        flow={flow}
+      />
       {csvHost
         ? createPortal(
             <CsvImport
