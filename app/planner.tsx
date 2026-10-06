@@ -1,9 +1,8 @@
 "use client";
 
-import { createPortal, flushSync } from "react-dom";
+import { flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calendarDate, currentWeek, formatDate } from "../src/calendar";
-import { mountData } from "../src/data-ui";
 import type { TaskActions } from "../src/editor";
 import { startOfflineShell } from "../src/offline";
 import type {
@@ -13,13 +12,13 @@ import type {
   TaskEdits,
 } from "../src/model";
 import { PlannerStorage } from "../src/storage";
-import { CsvImport } from "./csv-import";
+import { DataSection } from "./data-section";
 import { DaySection } from "./day-section";
 import { Search } from "./search";
 import { SomedaySection } from "./someday-section";
+import { TaskEditor } from "./task-editor";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
-import { TaskEditor } from "./task-editor";
 
 const bootStatus = "Загрузка планера…";
 const bootError =
@@ -34,13 +33,9 @@ function localDate(value: string): Date {
 
 type Phase = "loading" | "ready" | "error";
 
-interface CsvHost {
-  section: HTMLElement;
-  storage: PlannerStorage;
-}
-
 export function Planner() {
   const [phase, setPhase] = useState<Phase>("loading");
+  const [storage, setStorage] = useState<PlannerStorage | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [selected, setSelected] = useState<Date | null>(null);
   const [settings, setSettings] = useState<PlannerSettings | null>(null);
@@ -49,8 +44,6 @@ export function Planner() {
   const [listTasks, setListTasks] = useState<Task[]>([]);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set());
-  const [csvHost, setCsvHost] = useState<CsvHost | null>(null);
-  const [storage, setStorage] = useState<PlannerStorage | null>(null);
 
   const storageRef = useRef<PlannerStorage | null>(null);
   const selectedRef = useRef<Date | null>(null);
@@ -411,22 +404,6 @@ export function Planner() {
     return () => taskChangesBus.removeEventListener("tasks", listener);
   }, [putListTasks, putWeekTasks]);
 
-  useEffect(() => {
-    if (phase !== "ready") return;
-    const main = mainRef.current;
-    const opened = storageRef.current;
-    if (!main || !opened) return;
-    mountData(main, opened, refreshBoard, restored, { csvImport: false });
-    const section = main.querySelector<HTMLElement>(
-      'section[aria-label="Данные"]',
-    );
-    if (section) setCsvHost({ section, storage: opened });
-    return () => {
-      main.querySelector('section[aria-label="Данные"]')?.remove();
-      setCsvHost(null);
-    };
-  }, [phase, refreshBoard, restored]);
-
   if (phase === "loading") {
     return (
       <main id="app">
@@ -528,16 +505,14 @@ export function Planner() {
         revealed={revealed}
         flow={flow}
       />
-      {csvHost
-        ? createPortal(
-            <CsvImport
-              storage={csvHost.storage}
-              refresh={refreshBoard}
-              showStatus={showStatus}
-            />,
-            csvHost.section,
-          )
-        : null}
+      {storage && (
+        <DataSection
+          storage={storage}
+          refresh={refreshBoard}
+          restored={restored}
+          showStatus={showStatus}
+        />
+      )}
       <TaskEditor />
     </main>
   );
