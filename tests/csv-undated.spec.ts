@@ -64,7 +64,7 @@ test("confirmed mixed import appends duplicates to normalized lists, survives re
   await expect(
     page.getByRole("status").filter({ hasText: "Добавлено задач: 6" }),
   ).toBeVisible();
-  await expect(ideas.getByRole("listitem")).toHaveText([
+  await expect(ideas.getByRole("listitem").locator(".task-title")).toHaveText([
     "Existing idea",
     "Duplicate",
     "Duplicate",
@@ -77,12 +77,14 @@ test("confirmed mixed import appends duplicates to normalized lists, survives re
   await expect(
     page
       .getByRole("region", { name: "Список: Работа", exact: true })
-      .getByRole("listitem"),
+      .getByRole("listitem")
+      .locator(".task-title"),
   ).toHaveText(["New one", "New two"]);
   await expect(
     page
       .getByRole("region", { name: "Список: Входящие", exact: true })
-      .getByRole("listitem"),
+      .getByRole("listitem")
+      .locator(".task-title"),
   ).toHaveText("Default");
   await expect(
     page.getByRole("button", { name: "Dated", exact: true }),
@@ -94,7 +96,8 @@ test("confirmed mixed import appends duplicates to normalized lists, survives re
   await expect(
     reopened
       .getByRole("region", { name: "Список: Идеи", exact: true })
-      .getByRole("listitem"),
+      .getByRole("listitem")
+      .locator(".task-title"),
   ).toHaveText(["Existing idea", "Duplicate", "Duplicate"]);
   await reopened.getByLabel("Tweek CSV").setInputFiles(input);
   await reopened
@@ -112,6 +115,7 @@ test("confirmed mixed import appends duplicates to normalized lists, survives re
   await expect(
     reopened
       .getByRole("region", { name: "Список: Работа", exact: true })
-      .getByRole("listitem"),
+      .getByRole("listitem")
+      .locator(".task-title"),
   ).toHaveText(["New one", "New two"]);
 });

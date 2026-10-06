@@ -41,16 +41,21 @@ for (const action of ["renamed", "deleted"] as const) {
     const dialog = page.getByRole("dialog", { name: "Импорт CSV" });
     await expect(dialog).toContainText("Создаваемые списки: Входящие, Проекты");
     await dialog.getByRole("button", { name: "Подтвердить импорт" }).click();
-    await expect(inbox.getByRole("listitem")).toHaveText("Default");
+    await expect(inbox.getByRole("listitem").locator(".task-title")).toHaveText(
+      "Default",
+    );
     if (action === "renamed") {
       await expect(
         page
           .getByRole("region", { name: "Список: Архив", exact: true })
-          .getByRole("listitem"),
+          .getByRole("listitem")
+          .locator(".task-title"),
       ).toHaveText("Old task");
     }
     await page.reload();
-    await expect(inbox.getByRole("listitem")).toHaveText("Default");
+    await expect(inbox.getByRole("listitem").locator(".task-title")).toHaveText(
+      "Default",
+    );
   });
 }
 
@@ -125,7 +130,8 @@ test("real transaction abort rolls back new lists, tasks and history; open previ
   await expect(
     page
       .getByRole("region", { name: "Список: Новый проект", exact: true })
-      .getByRole("listitem"),
+      .getByRole("listitem")
+      .locator(".task-title"),
   ).toHaveText("Named");
 });
 
