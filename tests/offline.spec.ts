@@ -15,7 +15,7 @@ test("готовая оболочка и задачи переживают за�
     await expect(
       page.getByText("Готово к работе офлайн", { exact: true }),
     ).toBeVisible();
-    let input = page.getByRole("textbox").first();
+    let input = page.getByRole("textbox", { name: /Новая задача/ }).first();
     await input.fill("До отключения сети");
     await input.press("Enter");
     await expect(page.getByRole("status")).toHaveText("Задача сохранена");
@@ -29,7 +29,7 @@ test("готовая оболочка и задачи переживают за�
     await expect(
       page.getByText("До отключения сети", { exact: true }),
     ).toBeVisible();
-    input = page.getByRole("textbox").first();
+    input = page.getByRole("textbox", { name: /Новая задача/ }).first();
     await input.fill("Сохранено без сети");
     await input.press("Enter");
     await expect(page.getByRole("status")).toHaveText("Задача сохранена");
