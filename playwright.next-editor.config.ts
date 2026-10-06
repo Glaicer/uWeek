@@ -3,8 +3,10 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   testMatch: [
-    "editor-next*.spec.ts",
-    "checklist-next*.spec.ts",
+    "editor-next.spec.ts",
+    "editor-*-next.spec.ts",
+    "checklist-next.spec.ts",
+    "checklist-*-next.spec.ts",
     "legacy-repair-next.spec.ts",
   ],
   use: { baseURL: "http://127.0.0.1:4213", timezoneId: "Europe/Moscow" },
