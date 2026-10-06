@@ -13,7 +13,17 @@ pnpm dev
 
 Откройте адрес localhost, показанный Vite. Enter или «Добавить» сохраняет задачу, Escape отменяет ввод. Пустой ввод ничего не создаёт.
 
-Для самостоятельного статического размещения:
+### Запуск через Next.js (временный переход)
+
+```sh
+pnpm dev:next     # next dev на 127.0.0.1:4200
+pnpm build:next   # next build
+pnpm start:next   # next start на 127.0.0.1:4201
+```
+
+Планер доступен по прежнему адресу `/`. Сервер отдаёт только оболочку с состоянием загрузки: пользовательские задачи не читаются сервером и не попадают в серверный HTML. Существующий профиль и база `yourweek` (схема v3) открываются без переноса или очистки. Пока миграция интерфейса не завершена, планер работает через временный клиентский адаптер (`app/planner-adapter.tsx`), переиспользующий прежние модули `src/`; декларативный React-интерфейс и офлайн-оболочка для Next.js реализуются следующими этапами, поэтому под Next.js registration service worker пока не выполняется. Телеметрия Next.js отключена (`NEXT_TELEMETRY_DISABLED=1`) во всех скриптах для самостоятельного размещения. Браузерные проверки запуска через Next.js: `pnpm exec playwright test --config playwright.next.config.ts` (production на порту 4203) и `pnpm exec playwright test --config playwright.next-dev.config.ts` (dev и Strict Mode на порту 4202).
+
+Для самостоятельного статического размещения прежней версии:
 
 ```sh
 pnpm build
@@ -75,4 +85,4 @@ pnpm exec playwright test --config playwright.acceptance.config.ts
 - `src/board.ts` — отображение и быстрый ввод; получает данные и асинхронную команду создания, не открывает базу.
 - `src/editor.ts`, `src/search.ts`, `src/import-ui.ts`, `src/data-ui.ts` — пользовательские операции, поиск и перенос данных; `src/main.ts` — композиция. CSV проверяет `src/csv.ts`, формат копии — `src/backup.ts`, оболочку — `src/offline.ts` и `scripts/sw.js`.
 
-Версии инструментов закреплены по npm registry; TypeScript 6.0.3 выбран вместо latest 7.0.2 из-за ограничения совместимости typescript-eslint `<6.1`. Конфигурация сверена с Context7 документацией Vite, Playwright, typescript-eslint и Prettier.
+Версии инструментов закреплены по npm registry; TypeScript 6.0.3 выбран вместо latest 7.0.2 из-за ограничения совместимости typescript-eslint `<6.1`. Next.js 16.3.8, React/React DOM 19.3.0 и типы 19.3.0 проверены по registry 2026-10-06 (Node 24 и TypeScript 6.0.3 совместимы; lib поднят до ES2024 по требованиям типов Next.js). Для ESLint 10 взят `@next/eslint-plugin-next@16.3.8` с `eslint-plugin-react-hooks@7.1.1` вместо `eslint-config-next`, чьи транзитивные плагины не объявляют поддержку ESLint 10. Конфигурация сверена с Context7 документацией Vite, Playwright, typescript-eslint и Prettier.

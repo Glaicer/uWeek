@@ -1,8 +1,8 @@
 # Third-party notices
 
-YourWeek source is MIT licensed. Versions below are pinned in `package.json` and `pnpm-lock.yaml`; no dependencies were added for final acceptance.
+YourWeek source is MIT licensed. Versions below are pinned in `package.json` and `pnpm-lock.yaml`; the Next.js transition added `next`, `react` and `react-dom` for the in-progress interface migration.
 
-## Distributed browser dependency
+## Distributed browser dependency (static Vite build)
 
 Papa Parse 5.7.0 ([source](https://github.com/mholt/PapaParse)), MIT. The full notice follows and is shipped with `dist/`:
 
@@ -29,19 +29,35 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## Distributed browser dependencies (Next.js delivery)
+
+Under the Next.js delivery (`pnpm build:next`, `pnpm start:next`) the browser also receives framework code, all MIT:
+
+| Direct package | Version | License | Source                            |
+| -------------- | ------- | ------- | --------------------------------- |
+| next           | 16.3.8  | MIT     | https://github.com/vercel/next.js |
+| react          | 19.3.0  | MIT     | https://github.com/facebook/react |
+| react-dom      | 19.3.0  | MIT     | https://github.com/facebook/react |
+
+Their MIT texts follow the same terms as the notice above (copyright Meta Platforms, Inc. for React and React DOM; Vercel, Inc. for Next.js). The static Vite build continues to ship only Papa Parse.
+
 ## Build and test tools
 
-| Direct package    | Version | License    |
-| ----------------- | ------- | ---------- |
-| @eslint/js        | 10.0.1  | MIT        |
-| @playwright/test  | 1.63.0  | Apache-2.0 |
-| @types/node       | 26.6.4  | MIT        |
-| @types/papaparse  | 5.5.2   | MIT        |
-| eslint            | 10.12.0 | MIT        |
-| prettier          | 3.9.9   | MIT        |
-| typescript        | 6.0.3   | Apache-2.0 |
-| typescript-eslint | 8.71.0  | MIT        |
-| vite              | 8.3.2   | MIT        |
+| Direct package            | Version | License    |
+| ------------------------- | ------- | ---------- |
+| @eslint/js                | 10.0.1  | MIT        |
+| @next/eslint-plugin-next  | 16.3.8  | MIT        |
+| @playwright/test          | 1.63.0  | Apache-2.0 |
+| @types/node               | 26.6.4  | MIT        |
+| @types/papaparse          | 5.5.2   | MIT        |
+| @types/react              | 19.3.0  | MIT        |
+| @types/react-dom          | 19.3.0  | MIT        |
+| eslint                    | 10.12.0 | MIT        |
+| eslint-plugin-react-hooks | 7.1.1   | MIT        |
+| prettier                  | 3.9.9   | MIT        |
+| typescript                | 6.0.3   | Apache-2.0 |
+| typescript-eslint         | 8.71.0  | MIT        |
+| vite                      | 8.3.2   | MIT        |
 
 Audit source: installed locked packages' `package.json` license declarations and Papa Parse's installed `LICENSE`, 2026-10-06. The Linux dependency tree declares MIT, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0, BlueOak-1.0.0, and MPL-2.0. These permit use alongside MIT application code; they are not relicensed by YourWeek. MPL-2.0 applies to unmodified build-only `lightningcss` and its native binary, not to YourWeek source. Build/test tools and downloaded Playwright browsers are not distributed in `dist/`; redistribution of those tools/binaries must retain their own license and notice requirements. Optional binaries for other operating systems were not installed or audited here.
 
