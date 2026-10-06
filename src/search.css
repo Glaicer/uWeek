@@ -1,0 +1,26 @@
+.task-search {
+  color: #28352e;
+  background: #fafbf8;
+  border: 1px solid #8a998a;
+  border-radius: 12px;
+  width: min(640px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 24px;
+  overflow: auto;
+}
+.task-search::backdrop {
+  background: rgb(24 40 30 / 45%);
+}
+.task-search > label {
+  margin-bottom: 8px;
+}
+.task-search li button {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.task-search nav {
+  margin-bottom: 16px;
+}
+.task-search nav span {
+  flex: 1 1 100%;
+}
