@@ -1,7 +1,7 @@
 import { renderBoard } from "./board";
 import { calendarDate, currentWeek } from "./calendar";
 import type { PlannerStorage } from "./storage";
-import { mountCsvImport } from "./import-ui";
+import { mountData } from "./data-ui";
 import { mountSearch } from "./search";
 import type { Task } from "./model";
 
@@ -133,7 +133,11 @@ export async function startNavigation(
     startLabel.append(start);
     navigation.append(startLabel);
     root.querySelector("header")!.append(navigation);
-    mountCsvImport(root.querySelector("header")!, storage, render);
+    mountData(root, storage, render, async () => {
+      selected = new Date();
+      settings = await storage.readSettings();
+      await render();
+    });
     mountSearch(
       root.querySelector("header")!,
       storage,
