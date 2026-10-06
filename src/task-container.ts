@@ -1,6 +1,7 @@
 import type { Task } from "./model";
 import { openTaskEditor, type TaskActions } from "./editor";
 import { samePlacement } from "./placement";
+import { taskDragSource, taskDropTarget } from "./drag";
 
 export function renderTaskContainer(
   section: HTMLElement,
@@ -20,6 +21,7 @@ export function renderTaskContainer(
     actions.taskChanges.dispatchEvent(
       new CustomEvent("tasks", { detail: changed }),
     );
+  taskDropTarget(section, placement, actions, status, filter, publish);
   const renderTasks = () => {
     const active = document.activeElement as HTMLElement | null;
     const focusedId =
@@ -44,6 +46,14 @@ export function renderTaskContainer(
   };
   actions.taskChanges.addEventListener("tasks", (event) => {
     const changed = (event as CustomEvent<Task[]>).detail;
+    if (
+      !changed.some(
+        (entry) =>
+          samePlacement(entry.placement, placement) ||
+          tasks.some((task) => task.id === entry.id),
+      )
+    )
+      return;
     tasks = tasks.filter(
       (task) => !changed.some((entry) => entry.id === task.id),
     );
@@ -62,6 +72,7 @@ export function renderTaskContainer(
     const edit = document.createElement("button");
     edit.type = "button";
     edit.className = "task-title";
+    taskDragSource(edit, task.id, actions);
     const refresh = () => {
       edit.textContent = task.title;
       toggle.checked = task.completed;

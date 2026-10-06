@@ -542,23 +542,28 @@ export class PlannerStorage {
       if (
         !task ||
         !target ||
-        !samePlacement(task.placement, target.placement) ||
         (hideCompleted && (task.completed || target.completed))
       ) {
         transaction.abort();
         return;
       }
       const container = all
-        .filter((entry) => samePlacement(entry.placement, task.placement))
+        .filter((entry) => samePlacement(entry.placement, target.placement))
         .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
       const visible = container.filter(
         (entry) => !hideCompleted || !entry.completed,
       );
       const slots = visible.map((entry) => entry.order);
+      if (!samePlacement(task.placement, target.placement)) {
+        slots.push(Math.max(-1, ...container.map((entry) => entry.order)) + 1);
+      }
       const reordered = visible.filter((entry) => entry.id !== id);
       const index = reordered.findIndex((entry) => entry.id === targetId);
       if (id === targetId) return;
-      reordered.splice(index + (position === "after" ? 1 : 0), 0, task);
+      reordered.splice(index + (position === "after" ? 1 : 0), 0, {
+        ...task,
+        placement: target.placement,
+      });
       changed = reordered.map((entry, index) => ({
         ...entry,
         order: slots[index],

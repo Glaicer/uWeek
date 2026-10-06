@@ -160,7 +160,7 @@ test("new placement appends after maximum including hidden tasks and preserves e
   });
   try {
     const reopened = await otherTimezone.newPage();
-    await reopened.goto("http://127.0.0.1:4171/");
+    await reopened.goto(page.url());
     await reopened
       .getByLabel("Перейти к дате", { exact: true })
       .fill("1999-12-31");
