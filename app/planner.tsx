@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calendarDate, currentWeek, formatDate } from "../src/calendar";
 import type { TaskActions } from "../src/editor";
+import { startOfflineShell } from "../src/offline";
 import { mountSearch } from "../src/search";
 import type {
   PlannerSettings,
@@ -320,6 +321,10 @@ export function Planner() {
     },
     [putLists],
   );
+
+  useEffect(() => {
+    void startOfflineShell(process.env.NODE_ENV === "production");
+  }, []);
 
   useEffect(() => {
     let stale = false;

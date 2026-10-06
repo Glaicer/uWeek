@@ -29,12 +29,14 @@ export async function generateShell(directory) {
   for (const file of files) {
     hash.update(file).update(await readFile(resolve(directory, file)));
   }
+  const version = hash.digest("hex");
   await writeFile(
     resolve(directory, "sw.js"),
     template
       .replace("__SHELL_FILES__", JSON.stringify(files))
-      .replace("__SHELL_VERSION__", hash.digest("hex")),
+      .replace("__SHELL_VERSION__", version),
   );
+  return { version, files };
 }
 
 if (
