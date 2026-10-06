@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { showBootError } from "../src/boot";
+import { startOfflineShell } from "../src/offline";
 import { PlannerStorage } from "../src/storage";
 import { startNavigation } from "../src/navigation";
 
@@ -9,6 +10,10 @@ const bootStatus = "Загрузка планера…";
 
 export function PlannerAdapter() {
   const appRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    void startOfflineShell(process.env.NODE_ENV === "production");
+  }, []);
 
   useEffect(() => {
     const app = appRef.current;

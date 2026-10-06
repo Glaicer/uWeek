@@ -5,4 +5,4 @@ import { startOfflineShell } from "./offline";
 const app = document.querySelector<HTMLElement>("#app")!;
 
 void startPlanner(app);
-void startOfflineShell();
+void startOfflineShell(import.meta.env.PROD);
