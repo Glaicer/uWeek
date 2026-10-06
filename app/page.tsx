@@ -1,5 +1,5 @@
-import { PlannerAdapter } from "./planner-adapter";
+import { Planner } from "./planner";
 
 export default function Page() {
-  return <PlannerAdapter />;
+  return <Planner />;
 }
