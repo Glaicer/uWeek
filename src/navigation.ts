@@ -1,7 +1,7 @@
 import { renderBoard } from "./board";
 import { calendarDate, currentWeek } from "./calendar";
 import type { PlannerStorage } from "./storage";
-import { mountCsvImport } from "./import-ui";
+import { mountData } from "./data-ui";
 
 function localDate(value: string): Date {
   const [year, month, day] = value.split("-").map(Number);
@@ -122,7 +122,11 @@ export async function startNavigation(
     startLabel.append(start);
     navigation.append(startLabel);
     root.querySelector("header")!.append(navigation);
-    mountCsvImport(root.querySelector("header")!, storage, render);
+    mountData(root, storage, render, async () => {
+      selected = new Date();
+      settings = await storage.readSettings();
+      await render();
+    });
   }
   async function change(date: Date, focus: string): Promise<void> {
     try {

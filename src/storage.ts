@@ -9,6 +9,8 @@ import {
 } from "./model";
 import { samePlacement, validPlacement } from "./placement";
 import type { CsvPreview } from "./csv";
+import { validateBackup, type BackupV1 } from "./backup";
+import { calendarDate } from "./calendar";
 
 const databaseName = "yourweek";
 const schemaVersion = 3;
@@ -99,6 +101,44 @@ export class PlannerStorage {
       selectedWeek,
       importHistory,
     };
+  }
+
+  async restoreBackup(backup: BackupV1): Promise<void> {
+    const data = validateBackup(backup);
+    const transaction = this.database.transaction(
+      ["tasks", "lists", "settings", "navigation", "importHistory"],
+      "readwrite",
+    );
+    const done = transactionDone(transaction);
+    try {
+      for (const name of [
+        "tasks",
+        "lists",
+        "settings",
+        "navigation",
+        "importHistory",
+      ]) {
+        transaction.objectStore(name).clear();
+      }
+      for (const task of data.tasks) transaction.objectStore("tasks").add(task);
+      for (const list of data.lists) transaction.objectStore("lists").add(list);
+      for (const history of data.importHistory)
+        transaction.objectStore("importHistory").add(history);
+      transaction
+        .objectStore("settings")
+        .put({ weekStartsOn: data.settings.weekStartsOn }, "planner");
+      transaction
+        .objectStore("settings")
+        .put(data.settings.hideCompleted, "hideCompleted");
+      transaction
+        .objectStore("navigation")
+        .put(calendarDate(new Date()), "selectedWeek");
+    } catch (error) {
+      transaction.abort();
+      await done.catch(() => {});
+      throw error;
+    }
+    await done;
   }
 
   async readImportHistory(): Promise<ImportHistory[]> {
