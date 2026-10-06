@@ -7,6 +7,7 @@ export function mountData(
   storage: PlannerStorage,
   refresh: () => Promise<void>,
   restored: () => Promise<void>,
+  options: { csvImport?: boolean } = {},
 ): void {
   const section = document.createElement("section");
   section.setAttribute("aria-label", "Данные");
@@ -76,7 +77,9 @@ export function mountData(
   });
   section.append(heading, warning);
   root.append(section);
-  mountCsvImport(section, storage, refresh);
+  if (options.csvImport !== false) {
+    mountCsvImport(section, storage, refresh);
+  }
   section.append(exportButton, label, persist, persistence);
   input.addEventListener("change", async () => {
     const file = input.files?.[0];
