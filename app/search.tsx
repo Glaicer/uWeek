@@ -113,8 +113,9 @@ function SearchDialog(props: SearchProps & { onClose: () => void }) {
             task,
             place:
               task.placement.date ??
-              snapshot.lists.find((list) => list.id === task.placement.listId)!
-                .title,
+              snapshot.lists.find((list) => list.id === task.placement.listId)
+                ?.title ??
+              "",
           })),
           count: matches.length,
           pages,

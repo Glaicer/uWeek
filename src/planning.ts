@@ -23,10 +23,12 @@ export function orderByPlacement(
     );
   if (first !== undefined) return -1;
   if (second !== undefined) return 1;
+  const firstList =
+    listOrder.get(a.placement.listId!) ?? Number.POSITIVE_INFINITY;
+  const secondList =
+    listOrder.get(b.placement.listId!) ?? Number.POSITIVE_INFINITY;
   return (
-    listOrder.get(a.placement.listId!)! - listOrder.get(b.placement.listId!)! ||
-    a.order - b.order ||
-    a.id.localeCompare(b.id)
+    firstList - secondList || a.order - b.order || a.id.localeCompare(b.id)
   );
 }
 
