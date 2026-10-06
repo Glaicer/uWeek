@@ -161,3 +161,10 @@ test("production-запуск без hydration, runtime и console ошибок 
   ).toBeVisible();
   expect(problems).toEqual([]);
 });
+
+test("dev-маршрут real-storage seam недоступен в production", async ({
+  request,
+}) => {
+  const response = await request.get(`${url}/dev-storage`);
+  expect(response.status()).toBe(404);
+});
