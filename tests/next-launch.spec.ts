@@ -124,3 +124,40 @@ test("недоступная база объясняет проблему, а п
     ).toHaveCount(1);
   }
 });
+
+test("production-запуск без hydration, runtime и console ошибок при базовом цикле", async ({
+  page,
+}) => {
+  const problems: string[] = [];
+  page.on("pageerror", (error) => problems.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      problems.push(`console.${message.type()}: ${message.text()}`);
+  });
+  await page.clock.setFixedTime(new Date("2026-10-05T12:00:00+03:00"));
+  await page.goto(url);
+  const day = page.getByRole("region", { name: "понедельник, 5 октября" });
+  const input = day.getByRole("textbox");
+  await expect(input).toBeVisible();
+  await input.fill("Проверка консоли");
+  await input.press("Enter");
+  await expect(page.getByRole("status")).toHaveText("Задача сохранена");
+  await day.locator(".task-title").click();
+  const editor = page.getByRole("dialog", { name: "Редактор задачи" });
+  await expect(editor).toBeVisible();
+  await editor.getByLabel("Цвет").selectOption("red");
+  await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await page.getByRole("button", { name: "Следующая неделя" }).click();
+  await page.getByRole("button", { name: "Предыдущая неделя" }).click();
+  await page.getByRole("button", { name: "Поиск" }).click();
+  const search = page.locator(".task-search");
+  await search.getByRole("searchbox").fill("Проверка консоли");
+  await expect(search.getByRole("status")).toHaveText("Найдено: 1");
+  await page.getByRole("button", { name: "Закрыть поиск" }).click();
+  await page.reload();
+  await expect(
+    day.getByRole("button", { name: "Проверка консоли", exact: true }),
+  ).toBeVisible();
+  expect(problems).toEqual([]);
+});

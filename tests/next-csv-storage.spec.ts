@@ -164,10 +164,7 @@ test("undated confirmation reconciles prepared names with current lists and orde
     return { before, after: await storage.readSnapshot(), current, old, work };
   }, header);
   const tasks = result.before.tasks
-    .filter(
-      (task) =>
-        task.placement.listId === result.current.id,
-    )
+    .filter((task) => task.placement.listId === result.current.id)
     .sort((a: { order: number }, b: { order: number }) => a.order - b.order);
   expect(
     tasks.map((task: { title: string; order: number }) => [
@@ -180,13 +177,9 @@ test("undated confirmation reconciles prepared names with current lists and orde
     ["Source", 2],
   ]);
   expect(new Set(tasks.map((task: { id: string }) => task.id)).size).toBe(3);
-  expect(
-    tasks
-      .slice(1)
-      .map(
-        (task) => task.provenance!.recordNumber,
-      ),
-  ).toEqual([2, 4]);
+  expect(tasks.slice(1).map((task) => task.provenance!.recordNumber)).toEqual([
+    2, 4,
+  ]);
   expect(tasks[1].provenance!.fields).toEqual({
     Date: "",
     Task: "  Source  ",
@@ -196,18 +189,14 @@ test("undated confirmation reconciles prepared names with current lists and orde
     List: "  проекты  ",
   });
   expect(
-    result.after.tasks.find((task) => task.id === tasks[1].id)!
-      .provenance,
+    result.after.tasks.find((task) => task.id === tasks[1].id)!.provenance,
   ).toEqual(tasks[1].provenance);
   expect(
-    result.before.tasks.find(
-      (task) => task.title === "Old task",
-    )!.placement,
+    result.before.tasks.find((task) => task.title === "Old task")!.placement,
   ).toEqual({ listId: result.old.id });
   expect(
-    result.before.tasks.find(
-      (task) => task.title === "Created later",
-    )!.placement,
+    result.before.tasks.find((task) => task.title === "Created later")!
+      .placement,
   ).toEqual({ listId: result.work.id });
   expect(
     result.before.lists

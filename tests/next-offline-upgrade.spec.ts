@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
-import { chromium, expect, test } from "@playwright/test";
+import { chromium, firefox, expect, test } from "@playwright/test";
 
 const run = promisify(execFile);
 const oldCommit = "8657507";
@@ -131,184 +131,192 @@ async function downloadBackup(
   return await readFile(await file.path(), "utf8");
 }
 
-test("профиль со старой оболочкой переходит на Next.js без очистки данных", async ({
-  browserName,
-}, testInfo) => {
-  test.skip(browserName !== "chromium");
-  let nextServer: ReturnType<typeof startNextServer> | undefined;
-  const oldDist = await buildOldShell(testInfo.outputPath("old-shell"));
-  const oldServer = serveStatic(oldDist, port);
-  await oldServer.started;
-  const profile = testInfo.outputPath("upgrade-profile");
-  let context = await chromium.launchPersistentContext(profile, {
-    timezoneId: "Europe/Moscow",
-  });
-  try {
-    let page = context.pages()[0];
-    await page.clock.setFixedTime(today);
-    await page.goto(url);
-    await expect(
-      page.getByText("Готово к работе офлайн", { exact: true }),
-    ).toBeVisible();
-    await expect(page.locator("script[src*='/_next/']")).toHaveCount(0);
-
-    const day = page.getByRole("region", { name: "понедельник, 5 октября" });
-    await day.getByRole("textbox").fill("Старая задача");
-    await day.getByRole("textbox").press("Enter");
-    await expect(page.getByRole("status")).toHaveText("Задача сохранена");
-
-    await day.locator(".task-title").click();
-    const editor = page.locator(".task-editor");
-    await expect(editor).toBeVisible();
-    await editor.locator('textarea[name="notes"]').fill("Старая заметка");
-    await editor.locator('select[name="color"]').selectOption("blue");
-    await editor.getByRole("button", { name: "Добавить пункт" }).click();
-    await editor.getByLabel("Текст пункта 1").fill("Старый пункт");
-    await editor.getByRole("button", { name: "Сохранить" }).click();
-    await expect(editor).toHaveCount(0);
-
-    await page.getByLabel("Название нового списка").fill("Работа");
-    await page.getByRole("button", { name: "Добавить список" }).click();
-    await expect(page.getByRole("status")).toHaveText("Список сохранён");
-    const work = page.getByRole("region", { name: "Список: Работа" });
-    await work.getByRole("textbox").fill("Задача в списке");
-    await work.getByRole("textbox").press("Enter");
-    await expect(page.getByRole("status")).toHaveText("Задача сохранена");
-
-    await page.getByLabel("Перейти к дате").fill("2040-01-15");
-    await page.getByRole("button", { name: "Перейти", exact: true }).click();
-    await expect(page.getByLabel("Перейти к дате")).toHaveValue("2040-01-15");
-
-    await page.getByLabel("Tweek CSV").setInputFiles({
-      name: "synthetic.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(csv, "utf8"),
-    });
-    const importDialog = page.getByRole("dialog", { name: "Импорт CSV" });
-    await expect(importDialog).toBeVisible();
-    await importDialog
-      .getByRole("button", { name: "Подтвердить импорт" })
-      .click();
-    await expect(page.locator(".feedback")).toContainText("Добавлено задач: 1");
-    const before = await downloadBackup(page);
-    await expect(before).toContain("Старая задача");
-    await context.close();
-
-    await oldServer.close();
-    nextServer = startNextServer(port);
-    await nextServer.ready;
-    context = await chromium.launchPersistentContext(profile, {
+for (const [name, engine] of [
+  ["chromium", chromium],
+  ["firefox", firefox],
+] as const) {
+  test(`${name}: профиль со старой оболочкой переходит на Next.js без очистки данных`, async ({}, testInfo) => {
+    let nextServer: ReturnType<typeof startNextServer> | undefined;
+    const oldDist = await buildOldShell(
+      testInfo.outputPath(`old-shell-${name}`),
+    );
+    const oldServer = serveStatic(oldDist, port);
+    await oldServer.started;
+    const profile = testInfo.outputPath(`upgrade-profile-${name}`);
+    let context = await engine.launchPersistentContext(profile, {
       timezoneId: "Europe/Moscow",
     });
-    page = context.pages()[0];
-    await page.clock.setFixedTime(today);
-    await page.goto(url);
-    await expect(
-      page.getByRole("heading", { level: 1, name: /2040/ }),
-    ).toBeVisible();
-    await page.evaluate(() => {
-      (window as { sessionMarker?: string }).sessionMarker = "прежняя-сессия";
-    });
-    await expect(
-      page.getByText(/Обновление готово\. Сохраните изменения/),
-    ).toBeVisible({ timeout: 60_000 });
-    expect(
-      await page.evaluate(
-        () => (window as { sessionMarker?: string }).sessionMarker,
-      ),
-    ).toBe("прежняя-сессия");
-    await context.close();
+    try {
+      let page = context.pages()[0];
+      await page.clock.setFixedTime(today);
+      await page.goto(url);
+      await expect(
+        page.getByText("Готово к работе офлайн", { exact: true }),
+      ).toBeVisible();
+      await expect(page.locator("script[src*='/_next/']")).toHaveCount(0);
 
-    context = await chromium.launchPersistentContext(profile, {
-      timezoneId: "Europe/Moscow",
-    });
-    page = context.pages()[0];
-    await page.clock.setFixedTime(today);
-    await page.goto(url);
-    await expect(
-      page.getByText("Готово к работе офлайн", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.locator("script[src*='/_next/static/']").first(),
-    ).toBeAttached();
+      const day = page.getByRole("region", { name: "понедельник, 5 октября" });
+      await day.getByRole("textbox").fill("Старая задача");
+      await day.getByRole("textbox").press("Enter");
+      await expect(page.getByRole("status")).toHaveText("Задача сохранена");
 
-    await expect(page.getByLabel("Перейти к дате")).toHaveValue("2040-01-15");
-    await page.getByRole("button", { name: "Сегодня", exact: true }).click();
-    await expect(
-      page.getByText("Старая задача", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("region", { name: "Список: Работа" }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Задача в списке", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Импортированная задача", { exact: true }),
-    ).toBeVisible();
+      await day.locator(".task-title").click();
+      const editor = page.locator(".task-editor");
+      await expect(editor).toBeVisible();
+      await editor.locator('textarea[name="notes"]').fill("Старая заметка");
+      await editor.locator('select[name="color"]').selectOption("blue");
+      await editor.getByRole("button", { name: "Добавить пункт" }).click();
+      await editor.getByLabel("Текст пункта 1").fill("Старый пункт");
+      await editor.getByRole("button", { name: "Сохранить" }).click();
+      await expect(editor).toHaveCount(0);
 
-    const after = await downloadBackup(page);
-    const strip = (value: string) => {
-      const backup = JSON.parse(value) as Record<string, unknown>;
-      delete backup.exportedAt;
-      return backup;
-    };
-    expect(strip(after)).toEqual(strip(before));
+      await page.getByLabel("Название нового списка").fill("Работа");
+      await page.getByRole("button", { name: "Добавить список" }).click();
+      await expect(page.getByRole("status")).toHaveText("Список сохранён");
+      const work = page.getByRole("region", { name: "Список: Работа" });
+      await work.getByRole("textbox").fill("Задача в списке");
+      await work.getByRole("textbox").press("Enter");
+      await expect(page.getByRole("status")).toHaveText("Задача сохранена");
 
-    await page.getByLabel("Tweek CSV").setInputFiles({
-      name: "synthetic.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(csv, "utf8"),
-    });
-    const repeatDialog = page.getByRole("dialog", { name: "Импорт CSV" });
-    await expect(repeatDialog).toBeVisible();
-    await repeatDialog
-      .getByRole("button", { name: "Подтвердить импорт" })
-      .click();
-    await expect(page.locator(".feedback")).toContainText(
-      "Этот файл уже импортирован",
-    );
+      await page.getByLabel("Перейти к дате").fill("2040-01-15");
+      await page.getByRole("button", { name: "Перейти", exact: true }).click();
+      await expect(page.getByLabel("Перейти к дате")).toHaveValue("2040-01-15");
 
-    const shells = await page.evaluate(async () =>
-      (await caches.keys()).filter((name) =>
-        name.startsWith("yourweek-shell:"),
-      ),
-    );
-    expect(shells).toHaveLength(1);
-    const paths = await page.evaluate(
-      async (name) =>
-        (await (await caches.open(name)).keys()).map(
-          (request) => new URL(request.url).pathname,
+      await page.getByLabel("Tweek CSV").setInputFiles({
+        name: "synthetic.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csv, "utf8"),
+      });
+      const importDialog = page.getByRole("dialog", { name: "Импорт CSV" });
+      await expect(importDialog).toBeVisible();
+      await importDialog
+        .getByRole("button", { name: "Подтвердить импорт" })
+        .click();
+      await expect(page.locator(".feedback")).toContainText(
+        "Добавлено задач: 1",
+      );
+      const before = await downloadBackup(page);
+      await expect(before).toContain("Старая задача");
+      await context.close();
+
+      await oldServer.close();
+      nextServer = startNextServer(port);
+      await nextServer.ready;
+      context = await engine.launchPersistentContext(profile, {
+        timezoneId: "Europe/Moscow",
+      });
+      page = context.pages()[0];
+      await page.clock.setFixedTime(today);
+      await page.goto(url);
+      await expect(
+        page.getByRole("heading", { level: 1, name: /2040/ }),
+      ).toBeVisible();
+      await page.evaluate(() => {
+        (window as { sessionMarker?: string }).sessionMarker = "прежняя-сессия";
+      });
+      await expect(
+        page.getByText(/Обновление готово\. Сохраните изменения/),
+      ).toBeVisible({ timeout: 60_000 });
+      expect(
+        await page.evaluate(
+          () => (window as { sessionMarker?: string }).sessionMarker,
         ),
-      shells[0],
-    );
-    expect(paths).toContain("/index.html");
-    expect(paths.some((path) => path.startsWith("/_next/static/"))).toBe(true);
-    expect(paths).not.toContain("/assets/index-CYJ_IzCI.js");
-    await context.close();
+      ).toBe("прежняя-сессия");
+      await context.close();
 
-    await nextServer.close();
-    context = await chromium.launchPersistentContext(profile, {
-      timezoneId: "Europe/Moscow",
-      offline: true,
-    });
-    page = context.pages()[0];
-    await page.clock.setFixedTime(today);
-    await page.goto(url);
-    await expect(
-      page.getByText("Готово к работе офлайн", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Старая задача", { exact: true }),
-    ).toBeVisible();
-    const offlineInput = page
-      .getByRole("textbox", { name: /Новая задача/ })
-      .first();
-    await offlineInput.fill("Сохранено офлайн после перехода");
-    await offlineInput.press("Enter");
-    await expect(page.getByRole("status")).toHaveText("Задача сохранена");
-  } finally {
-    await context.close();
-    await Promise.allSettled([oldServer?.close(), nextServer?.close()]);
-  }
-});
+      context = await engine.launchPersistentContext(profile, {
+        timezoneId: "Europe/Moscow",
+      });
+      page = context.pages()[0];
+      await page.clock.setFixedTime(today);
+      await page.goto(url);
+      await expect(
+        page.getByText("Готово к работе офлайн", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.locator("script[src*='/_next/static/']").first(),
+      ).toBeAttached();
+
+      await expect(page.getByLabel("Перейти к дате")).toHaveValue("2040-01-15");
+      await page.getByRole("button", { name: "Сегодня", exact: true }).click();
+      await expect(
+        page.getByText("Старая задача", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("region", { name: "Список: Работа" }),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Задача в списке", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Импортированная задача", { exact: true }),
+      ).toBeVisible();
+
+      const after = await downloadBackup(page);
+      const strip = (value: string) => {
+        const backup = JSON.parse(value) as Record<string, unknown>;
+        delete backup.exportedAt;
+        return backup;
+      };
+      expect(strip(after)).toEqual(strip(before));
+
+      await page.getByLabel("Tweek CSV").setInputFiles({
+        name: "synthetic.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csv, "utf8"),
+      });
+      const repeatDialog = page.getByRole("dialog", { name: "Импорт CSV" });
+      await expect(repeatDialog).toBeVisible();
+      await repeatDialog
+        .getByRole("button", { name: "Подтвердить импорт" })
+        .click();
+      await expect(page.locator(".feedback")).toContainText(
+        "Этот файл уже импортирован",
+      );
+
+      const shells = await page.evaluate(async () =>
+        (await caches.keys()).filter((name) =>
+          name.startsWith("yourweek-shell:"),
+        ),
+      );
+      expect(shells).toHaveLength(1);
+      const paths = await page.evaluate(
+        async (name) =>
+          (await (await caches.open(name)).keys()).map(
+            (request) => new URL(request.url).pathname,
+          ),
+        shells[0],
+      );
+      expect(paths).toContain("/index.html");
+      expect(paths.some((path) => path.startsWith("/_next/static/"))).toBe(
+        true,
+      );
+      expect(paths).not.toContain("/assets/index-CYJ_IzCI.js");
+      await context.close();
+
+      await nextServer.close();
+      context = await engine.launchPersistentContext(profile, {
+        timezoneId: "Europe/Moscow",
+        offline: true,
+      });
+      page = context.pages()[0];
+      await page.clock.setFixedTime(today);
+      await page.goto(url);
+      await expect(
+        page.getByText("Готово к работе офлайн", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText("Старая задача", { exact: true }),
+      ).toBeVisible();
+      const offlineInput = page
+        .getByRole("textbox", { name: /Новая задача/ })
+        .first();
+      await offlineInput.fill("Сохранено офлайн после перехода");
+      await offlineInput.press("Enter");
+      await expect(page.getByRole("status")).toHaveText("Задача сохранена");
+    } finally {
+      await context.close();
+      await Promise.allSettled([oldServer?.close(), nextServer?.close()]);
+    }
+  });
+}
