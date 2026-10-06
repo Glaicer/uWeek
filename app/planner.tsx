@@ -1,6 +1,6 @@
 "use client";
 
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calendarDate, currentWeek, formatDate } from "../src/calendar";
 import { mountData } from "../src/data-ui";
@@ -14,6 +14,7 @@ import type {
   TaskEdits,
 } from "../src/model";
 import { PlannerStorage } from "../src/storage";
+import { CsvImport } from "./csv-import";
 import { DaySection } from "./day-section";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
@@ -31,6 +32,11 @@ function localDate(value: string): Date {
 
 type Phase = "loading" | "ready" | "error";
 
+interface CsvHost {
+  section: HTMLElement;
+  storage: PlannerStorage;
+}
+
 export function Planner() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [attempt, setAttempt] = useState(0);
@@ -40,6 +46,7 @@ export function Planner() {
   const [lists, setLists] = useState<SomedayList[]>([]);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(new Set());
+  const [csvHost, setCsvHost] = useState<CsvHost | null>(null);
 
   const storageRef = useRef<PlannerStorage | null>(null);
   const selectedRef = useRef<Date | null>(null);
@@ -374,10 +381,16 @@ export function Planner() {
   useEffect(() => {
     if (phase !== "ready") return;
     const main = mainRef.current;
-    if (!main) return;
-    mountData(main, storageRef.current!, refreshBoard, restored);
+    const opened = storageRef.current;
+    if (!main || !opened) return;
+    mountData(main, opened, refreshBoard, restored, { csvImport: false });
+    const section = main.querySelector<HTMLElement>(
+      'section[aria-label="Данные"]',
+    );
+    if (section) setCsvHost({ section, storage: opened });
     return () => {
       main.querySelector('section[aria-label="Данные"]')?.remove();
+      setCsvHost(null);
     };
   }, [phase, refreshBoard, restored]);
 
@@ -501,6 +514,16 @@ export function Planner() {
         <h2 id="someday-title">Когда-нибудь</h2>
         <div className="lists" />
       </section>
+      {csvHost
+        ? createPortal(
+            <CsvImport
+              storage={csvHost.storage}
+              refresh={refreshBoard}
+              showStatus={showStatus}
+            />,
+            csvHost.section,
+          )
+        : null}
     </main>
   );
 }
