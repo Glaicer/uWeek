@@ -9,26 +9,36 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:next": "NEXT_TELEMETRY_DISABLED=1 next dev --hostname 127.0.0.1 --port 4200",
     "build": "node scripts/build.mjs",
+    "build:next": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "start:next": "NEXT_TELEMETRY_DISABLED=1 next start --hostname 127.0.0.1 --port 4201",
     "preview": "vite preview --host 127.0.0.1",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "NEXT_TELEMETRY_DISABLED=1 next typegen && tsc --noEmit",
     "test:offline": "playwright test --config playwright.offline.config.ts",
     "lint": "eslint .",
-    "format:check": "prettier --check src tests scripts *.json *.ts *.mjs index.html README.md",
+    "format:check": "prettier --check src app tests scripts *.json *.ts *.mjs index.html README.md",
     "test:browser": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@next/eslint-plugin-next": "16.3.8",
     "@playwright/test": "1.63.0",
     "@types/node": "26.6.4",
     "@types/papaparse": "5.5.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "eslint": "10.12.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
     "vite": "8.3.2"
   },
   "dependencies": {
-    "papaparse": "5.7.0"
+    "next": "16.3.8",
+    "papaparse": "5.7.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
