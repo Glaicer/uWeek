@@ -135,7 +135,8 @@ for (const [name, engine] of [
   ["chromium", chromium],
   ["firefox", firefox],
 ] as const) {
-  test(`${name}: профиль со старой оболочкой переходит на Next.js без очистки данных`, async ({}, testInfo) => {
+  test(`${name}: профиль со старой оболочкой переходит на Next.js без очистки данных`, async () => {
+    const testInfo = test.info();
     let nextServer: ReturnType<typeof startNextServer> | undefined;
     const oldDist = await buildOldShell(
       testInfo.outputPath(`old-shell-${name}`),

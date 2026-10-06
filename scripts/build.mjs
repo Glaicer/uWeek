@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { URL } from "node:url";
 
 export async function generateShell(directory) {
   const entries = await readdir(directory, {

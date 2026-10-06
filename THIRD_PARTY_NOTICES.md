@@ -1,10 +1,10 @@
 # Third-party notices
 
-YourWeek source is MIT licensed. Versions below are pinned in `package.json` and `pnpm-lock.yaml`; the Next.js transition added `next`, `react` and `react-dom` for the in-progress interface migration.
+YourWeek source is MIT licensed. Versions below are pinned in `package.json` and `pnpm-lock.yaml`; the app is delivered by Next.js (`pnpm build`, `pnpm start`), which ships `next`, `react` and `react-dom` browser code alongside the application.
 
-## Distributed browser dependency (static Vite build)
+## Distributed browser dependency
 
-Papa Parse 5.7.0 ([source](https://github.com/mholt/PapaParse)), MIT. The full notice follows and is shipped with `dist/`:
+Papa Parse 5.7.0 ([source](https://github.com/mholt/PapaParse)), MIT. The full notice follows and is shipped with the shell:
 
 ```text
 The MIT License (MIT)
@@ -29,9 +29,9 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-## Distributed browser dependencies (Next.js delivery)
+## Distributed framework dependencies (Next.js delivery)
 
-Under the Next.js delivery (`pnpm build:next`, `pnpm start:next`) the browser also receives framework code, all MIT:
+The browser also receives framework code, all MIT:
 
 | Direct package | Version | License | Source                            |
 | -------------- | ------- | ------- | --------------------------------- |
@@ -39,7 +39,7 @@ Under the Next.js delivery (`pnpm build:next`, `pnpm start:next`) the browser al
 | react          | 19.3.0  | MIT     | https://github.com/facebook/react |
 | react-dom      | 19.3.0  | MIT     | https://github.com/facebook/react |
 
-Their MIT texts follow the same terms as the notice above (copyright Meta Platforms, Inc. for React and React DOM; Vercel, Inc. for Next.js). The static Vite build continues to ship only Papa Parse.
+Their MIT texts follow the same terms as the notice above (copyright Meta Platforms, Inc. for React and React DOM; Vercel, Inc. for Next.js).
 
 ## Build and test tools
 
@@ -57,7 +57,6 @@ Their MIT texts follow the same terms as the notice above (copyright Meta Platfo
 | prettier                  | 3.9.9   | MIT        |
 | typescript                | 6.0.3   | Apache-2.0 |
 | typescript-eslint         | 8.71.0  | MIT        |
-| vite                      | 8.3.2   | MIT        |
 
 Audit source: installed locked packages' `package.json` license declarations and Papa Parse's installed `LICENSE`, 2026-10-06. The Linux dependency tree declares MIT, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0, BlueOak-1.0.0, and MPL-2.0. These permit use alongside MIT application code; they are not relicensed by YourWeek. MPL-2.0 applies to unmodified build-only `lightningcss` and its native binary, not to YourWeek source. Build/test tools and downloaded Playwright browsers are not distributed in `dist/`; redistribution of those tools/binaries must retain their own license and notice requirements. Optional binaries for other operating systems were not installed or audited here.
 
