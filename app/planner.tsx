@@ -3,7 +3,6 @@
 import { flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calendarDate, currentWeek, formatDate } from "../src/calendar";
-import { mountData } from "../src/data-ui";
 import { renderLists, type ListActions } from "../src/lists";
 import type { TaskActions } from "../src/editor";
 import { mountSearch } from "../src/search";
@@ -14,6 +13,7 @@ import type {
   TaskEdits,
 } from "../src/model";
 import { PlannerStorage } from "../src/storage";
+import { DataSection } from "./data-section";
 import { DaySection } from "./day-section";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
@@ -33,6 +33,7 @@ type Phase = "loading" | "ready" | "error";
 
 export function Planner() {
   const [phase, setPhase] = useState<Phase>("loading");
+  const [storage, setStorage] = useState<PlannerStorage | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [selected, setSelected] = useState<Date | null>(null);
   const [settings, setSettings] = useState<PlannerSettings | null>(null);
@@ -300,6 +301,7 @@ export function Planner() {
         ]);
         if (stale) return;
         storageRef.current = opened;
+        setStorage(opened);
         selectedRef.current = initial;
         weekStartRef.current = initialSettings.weekStartsOn;
         weekTasksRef.current = tasks;
@@ -370,16 +372,6 @@ export function Planner() {
       header.querySelector("[data-search-trigger]")?.remove();
     };
   }, [goToTask, phase, refreshBoard, taskActions]);
-
-  useEffect(() => {
-    if (phase !== "ready") return;
-    const main = mainRef.current;
-    if (!main) return;
-    mountData(main, storageRef.current!, refreshBoard, restored);
-    return () => {
-      main.querySelector('section[aria-label="Данные"]')?.remove();
-    };
-  }, [phase, refreshBoard, restored]);
 
   const listSignature = lists.map((list) => list.id).join("\n");
 
@@ -501,6 +493,14 @@ export function Planner() {
         <h2 id="someday-title">Когда-нибудь</h2>
         <div className="lists" />
       </section>
+      {storage && (
+        <DataSection
+          storage={storage}
+          refresh={refreshBoard}
+          restored={restored}
+          showStatus={showStatus}
+        />
+      )}
     </main>
   );
 }

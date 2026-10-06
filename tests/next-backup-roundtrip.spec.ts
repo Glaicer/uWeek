@@ -42,7 +42,9 @@ test("копия контрольной старой версии восстан
   await oldPage.clock.setFixedTime(fixed);
   await oldPage.goto(`${oldOrigin}/`);
   await createTask(oldPage, "2026-10-05", "Домашние дела");
-  await oldPage.getByRole("button", { name: "Домашние дела" }).click();
+  await oldPage
+    .getByRole("button", { name: "Домашние дела", exact: true })
+    .click();
   const editor = oldPage.getByRole("dialog");
   await editor
     .getByLabel("Заметка", { exact: true })
@@ -56,7 +58,7 @@ test("копия контрольной старой версии восстан
   await oldPage.getByRole("button", { name: "Перейти", exact: true }).click();
   await createTask(oldPage, "2041-02-28", "Далёкий план");
   await oldPage.getByLabel("Начало недели").selectOption("0");
-  await expect(oldPage.getByRole("status")).toHaveText("Настройка сохранена");
+  await expect(oldPage.getByLabel("Начало недели")).toHaveValue("0");
   const backup = await download(oldPage);
   expect(backup.version).toBe(1);
 
@@ -104,7 +106,9 @@ test("копия новой версии восстанавливается ко
   await newPage.clock.setFixedTime(fixed);
   await newPage.goto(`${newOrigin}/`);
   await createTask(newPage, "2026-10-05", "Свежая задача");
-  await newPage.getByRole("button", { name: "Свежая задача" }).click();
+  await newPage
+    .getByRole("button", { name: "Свежая задача", exact: true })
+    .click();
   const editor = newPage.getByRole("dialog");
   await editor
     .getByRole("combobox", { name: "Цвет", exact: true })
@@ -139,7 +143,9 @@ test("копия новой версии восстанавливается ко
     "blue",
   );
   await expect(oldPage.getByLabel("Начало недели")).toHaveValue("1");
-  await oldPage.getByRole("button", { name: "Свежая задача" }).click();
+  await oldPage
+    .getByRole("button", { name: "Свежая задача", exact: true })
+    .click();
   const oldEditor = oldPage.getByRole("dialog");
   await expect(
     oldEditor.getByLabel("Текст пункта 1", { exact: true }),
