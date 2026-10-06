@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL, URL } from "node:url";
@@ -52,5 +52,11 @@ if (
       },
     ],
   });
+  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
+    await copyFile(
+      new URL(`../${file}`, import.meta.url),
+      resolve(output, file),
+    );
+  }
   await generateShell(output);
 }

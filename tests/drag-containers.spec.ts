@@ -15,11 +15,22 @@ async function drop(
   target: Locator,
   after = false,
 ) {
+  await source.scrollIntoViewIfNeeded();
+  const from = (await source.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    from.x + from.width / 2 + 15,
+    from.y + from.height / 2,
+    { steps: 5 },
+  );
   await target.scrollIntoViewIfNeeded();
   const box = (await target.boundingBox())!;
-  await source.dragTo(target, {
-    targetPosition: { x: box.width / 2, y: box.height * (after ? 0.8 : 0.2) },
-  });
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height * (after ? 0.8 : 0.2);
+  await page.mouse.move(x, y, { steps: 10 });
+  await page.mouse.move(x, y);
+  await page.mouse.up();
   await expect(page.getByRole("status")).toHaveText("Перемещение сохранено");
 }
 

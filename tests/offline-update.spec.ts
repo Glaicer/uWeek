@@ -160,7 +160,7 @@ test("ошибочное и успешное обновления сохраня
     await expect(
       page.getByText("Готово к работе офлайн", { exact: true }),
     ).toBeVisible();
-    const input = page.getByRole("textbox").first();
+    const input = page.getByRole("textbox", { name: /Новая задача/ }).first();
     await input.fill("Сохранено до обновления");
     await input.press("Enter");
     await expect(page.getByRole("status")).toHaveText("Задача сохранена");

@@ -47,7 +47,7 @@ export function mountCsvImport(
     summary.textContent = `Задач: ${preview.records.length}. Выполненных: ${preview.completed}. Невыполненных: ${preview.records.length - preview.completed}. Без даты: ${preview.undated}. Создаваемые списки: ${newListTitles.join(", ") || "нет"}. Пустых записей: ${preview.emptyRecords}. Точные повторные вхождения: ${preview.duplicateOccurrences}. Диапазон дат: ${preview.firstDate ?? "нет"} — ${preview.lastDate ?? "нет"}.`;
     const warning = document.createElement("p");
     warning.textContent =
-      "CSV не содержит правил повторения; повторяющиеся серии не восстанавливаются. Новый файл добавляет все строки и может повторять прежние задачи. Повтор тех же исходных байтов добавляет ноль задач. Файл остаётся на устройстве.";
+      "CSV не содержит правил повторения; повторяющиеся серии не восстанавливаются, после последней выгруженной даты новые вхождения не создаются. Отсутствующие в CSV списки и их задачи не восстанавливаются. Новый файл добавляет все строки и может повторять прежние задачи. Повтор тех же исходных байтов добавляет ноль задач. Файл остаётся на устройстве.";
     const list = document.createElement("ol");
     for (const record of preview.records.slice(0, 20)) {
       const item = document.createElement("li");

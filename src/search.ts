@@ -103,6 +103,7 @@ export function mountSearch(
           : "Ничего не найдено";
         for (const task of matches.slice(page * 50, (page + 1) * 50)) {
           const row = document.createElement("li");
+          row.dataset.taskId = task.id;
           const title = document.createElement("button");
           title.type = "button";
           title.textContent = task.title;
@@ -116,7 +117,16 @@ export function mountSearch(
             try {
               await openTaskEditor(task, title, actions, () => {
                 void refreshBoard()
-                  .then(renderResults)
+                  .then(async () => {
+                    await renderResults();
+                    const result = [...results.querySelectorAll("li")].find(
+                      (entry) => entry.dataset.taskId === task.id,
+                    );
+                    (
+                      result?.querySelector<HTMLButtonElement>("button") ??
+                      query
+                    ).focus();
+                  })
                   .catch(() => {
                     status.textContent =
                       "Не удалось обновить результаты. Повторите поиск.";
