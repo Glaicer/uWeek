@@ -2,7 +2,12 @@
 
 import { flushSync } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { calendarDate, currentWeek, formatDate } from "../src/calendar";
+import {
+  calendarDate,
+  currentWeek,
+  formatDate,
+  localDate,
+} from "../src/calendar";
 import type { TaskActions } from "../src/editor";
 import { startOfflineShell } from "../src/offline";
 import type {
@@ -11,6 +16,7 @@ import type {
   Task,
   TaskEdits,
 } from "../src/model";
+import { inWeek, mergeTasks, tasksForDate } from "../src/planning";
 import { PlannerStorage } from "../src/storage";
 import { DataSection } from "./data-section";
 import { DaySection } from "./day-section";
@@ -25,11 +31,6 @@ const bootError =
   "Локальная база недоступна. Задачи не загружены. Разрешите хранение данных в этом браузере и повторите попытку.";
 
 const taskChangesBus = new EventTarget();
-
-function localDate(value: string): Date {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day, 12);
-}
 
 type Phase = "loading" | "ready" | "error";
 
@@ -253,30 +254,41 @@ export function Planner() {
     filterRef.current?.focus();
   }, []);
 
+  const updateTask = useCallback(
+    (id: string, edits: Partial<TaskEdits>) =>
+      storageRef.current!.updateTask(id, edits),
+    [],
+  );
+
   const taskActions = useMemo<TaskActions>(
     () => ({
-      updateTask: (id, edits: Partial<TaskEdits>) =>
-        storageRef.current!.updateTask(id, edits),
+      updateTask,
       deleteTask: (id) => storageRef.current!.deleteTask(id),
       readLists: () => storageRef.current!.readLists(),
       reorderTask: (id, targetId, position, hide) =>
         storageRef.current!.reorderTask(id, targetId, position, hide),
       taskChanges: taskChangesBus,
     }),
-    [],
+    [updateTask],
   );
 
   const flow = useMemo<TaskFlow>(
     () => ({
-      updateTask: (id: string, edits: Partial<TaskEdits>) =>
-        storageRef.current!.updateTask(id, edits),
+      updateTask,
       removeTask,
       publish,
       showStatus,
       requestFilterFocus,
       actions: taskActions,
     }),
-    [publish, removeTask, requestFilterFocus, showStatus, taskActions],
+    [
+      publish,
+      removeTask,
+      requestFilterFocus,
+      showStatus,
+      taskActions,
+      updateTask,
+    ],
   );
 
   const createTask = useCallback(async (title: string, date: string) => {
@@ -383,23 +395,18 @@ export function Planner() {
       const firstDate = calendarDate(days[0]);
       const lastDate = calendarDate(days[6]);
       flushSync(() => {
-        putWeekTasks([
-          ...weekTasksRef.current.filter(
-            (task) => !changed.some((entry) => entry.id === task.id),
+        putWeekTasks(
+          mergeTasks(weekTasksRef.current, changed, (task) =>
+            inWeek(task, firstDate, lastDate),
           ),
-          ...changed.filter(
-            (task) =>
-              task.placement.date !== undefined &&
-              task.placement.date >= firstDate &&
-              task.placement.date <= lastDate,
+        );
+        putListTasks(
+          mergeTasks(
+            listTasksRef.current,
+            changed,
+            (task) => task.placement.listId !== undefined,
           ),
-        ]);
-        putListTasks([
-          ...listTasksRef.current.filter(
-            (task) => !changed.some((entry) => entry.id === task.id),
-          ),
-          ...changed.filter((task) => task.placement.listId !== undefined),
-        ]);
+        );
       });
     };
     taskChangesBus.addEventListener("tasks", listener);
@@ -487,7 +494,7 @@ export function Planner() {
               day={day}
               date={date}
               today={calendarDate(new Date())}
-              tasks={weekTasks.filter((task) => task.placement.date === date)}
+              tasks={tasksForDate(weekTasks, date)}
               createTask={(title) => createTask(title, date)}
               hideCompleted={hideCompleted}
               revealed={revealed}

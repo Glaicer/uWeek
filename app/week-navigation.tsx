@@ -1,6 +1,6 @@
 "use client";
 
-import { calendarDate } from "../src/calendar";
+import { calendarDate, localDate } from "../src/calendar";
 
 export interface WeekNavigationProps {
   selected: Date;
@@ -76,9 +76,4 @@ export function WeekNavigation(props: WeekNavigationProps) {
       </label>
     </nav>
   );
-}
-
-function localDate(value: string): Date {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day, 12);
 }

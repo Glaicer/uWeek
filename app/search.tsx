@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { calendarDate } from "../src/calendar";
 import { openTaskEditor, type TaskActions } from "../src/editor";
 import type { Task } from "../src/model";
+import { isOverdue, orderByPlacement, paginate } from "../src/planning";
 import type { PlannerStorage } from "../src/storage";
 import "../src/search.css";
 
@@ -94,39 +95,21 @@ function SearchDialog(props: SearchProps & { onClose: () => void }) {
           .filter(
             (task) =>
               (includeCompleted || !task.completed) &&
-              (!overdueOnly ||
-                (!task.completed &&
-                  task.placement.date !== undefined &&
-                  task.placement.date < today)) &&
+              (!overdueOnly || isOverdue(task, today)) &&
               [
                 task.title,
                 task.notes ?? "",
                 ...(task.checklist ?? []).map((item) => item.text),
               ].some((value) => value.toLowerCase().includes(text)),
           )
-          .sort((a, b) => {
-            const first = a.placement.date;
-            const second = b.placement.date;
-            if (first !== undefined && second !== undefined)
-              return (
-                first.localeCompare(second) ||
-                a.order - b.order ||
-                a.id.localeCompare(b.id)
-              );
-            if (first !== undefined) return -1;
-            if (second !== undefined) return 1;
-            return (
-              listOrder.get(a.placement.listId!)! -
-                listOrder.get(b.placement.listId!)! ||
-              a.order - b.order ||
-              a.id.localeCompare(b.id)
-            );
-          });
-        const pages = Math.max(1, Math.ceil(matches.length / pageSize));
-        const safePage = Math.min(page, pages - 1);
-        const start = safePage * pageSize;
+          .sort((a, b) => orderByPlacement(a, b, listOrder));
+        const {
+          rows,
+          pages,
+          page: safePage,
+        } = paginate(matches, page, pageSize);
         setView({
-          rows: matches.slice(start, start + pageSize).map((task) => ({
+          rows: rows.map((task) => ({
             task,
             place:
               task.placement.date ??
