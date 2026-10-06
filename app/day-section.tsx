@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useRef } from "react";
 import type { Task } from "../src/model";
 import { TaskContainer, type TaskFlow } from "./task-container";
 
@@ -21,8 +22,11 @@ export function DaySection(props: {
 }) {
   const label = dayLabel.format(props.day);
   const isToday = props.date === props.today;
+  const sectionRef = useRef<HTMLElement>(null);
+  const placement = useMemo(() => ({ date: props.date }), [props.date]);
   return (
     <section
+      ref={sectionRef}
       className={`day${isToday ? " today" : ""}`}
       data-date={props.date}
       aria-label={label}
@@ -31,11 +35,12 @@ export function DaySection(props: {
       {isToday && <p className="today-marker">Сегодня</p>}
       <TaskContainer
         label={label}
-        placement={{ date: props.date }}
+        placement={placement}
         tasks={props.tasks}
         createTask={props.createTask}
         hideCompleted={props.hideCompleted}
         revealed={props.revealed}
+        sectionRef={sectionRef}
         flow={props.flow}
       />
     </section>

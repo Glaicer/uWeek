@@ -388,23 +388,25 @@ export function Planner() {
       const days = currentWeek(current, weekStartRef.current);
       const firstDate = calendarDate(days[0]);
       const lastDate = calendarDate(days[6]);
-      putWeekTasks([
-        ...weekTasksRef.current.filter(
-          (task) => !changed.some((entry) => entry.id === task.id),
-        ),
-        ...changed.filter(
-          (task) =>
-            task.placement.date !== undefined &&
-            task.placement.date >= firstDate &&
-            task.placement.date <= lastDate,
-        ),
-      ]);
-      putListTasks([
-        ...listTasksRef.current.filter(
-          (task) => !changed.some((entry) => entry.id === task.id),
-        ),
-        ...changed.filter((task) => task.placement.listId !== undefined),
-      ]);
+      flushSync(() => {
+        putWeekTasks([
+          ...weekTasksRef.current.filter(
+            (task) => !changed.some((entry) => entry.id === task.id),
+          ),
+          ...changed.filter(
+            (task) =>
+              task.placement.date !== undefined &&
+              task.placement.date >= firstDate &&
+              task.placement.date <= lastDate,
+          ),
+        ]);
+        putListTasks([
+          ...listTasksRef.current.filter(
+            (task) => !changed.some((entry) => entry.id === task.id),
+          ),
+          ...changed.filter((task) => task.placement.listId !== undefined),
+        ]);
+      });
     };
     taskChangesBus.addEventListener("tasks", listener);
     return () => taskChangesBus.removeEventListener("tasks", listener);

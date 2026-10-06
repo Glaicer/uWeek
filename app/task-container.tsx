@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { openTaskEditor, type TaskActions } from "../src/editor";
 import type { Placement, Task, TaskEdits } from "../src/model";
+import { attachTaskDragSource, attachTaskDropTarget } from "./drag";
 
 export interface TaskFlow {
   updateTask: (id: string, edits: Partial<TaskEdits>) => Promise<Task>;
@@ -20,6 +21,7 @@ export interface TaskContainerProps {
   createTask: (title: string) => Promise<Task>;
   hideCompleted: boolean;
   revealed: ReadonlySet<string>;
+  sectionRef: RefObject<HTMLElement | null>;
   flow: TaskFlow;
 }
 
@@ -30,17 +32,29 @@ function TaskRow(props: {
   task: Task;
   hidden: boolean;
   hideCompleted: boolean;
+  before?: Task;
+  after?: Task;
   flow: TaskFlow;
 }) {
   const { task, flow } = props;
   const toggleRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLButtonElement>(null);
+  const directionRefs = useRef(
+    new Map<"before" | "after", HTMLButtonElement | null>(),
+  );
+  const reordering = useRef(false);
   const [saving, setSaving] = useState(false);
   const [opening, setOpening] = useState(false);
 
   useEffect(() => {
     if (toggleRef.current) toggleRef.current.checked = task.completed;
   }, [task.completed]);
+
+  useEffect(() => {
+    const button = editRef.current;
+    if (!button) return;
+    return attachTaskDragSource(button, task.id, flow.actions);
+  }, [task.id, flow.actions]);
 
   const onToggle = async () => {
     const toggle = toggleRef.current;
@@ -79,6 +93,40 @@ function TaskRow(props: {
     }
   };
 
+  const reorder = async (direction: "before" | "after") => {
+    const target = direction === "before" ? props.before : props.after;
+    const control = directionRefs.current.get(direction);
+    if (!target || !control || reordering.current) return;
+    const wasFocused = document.activeElement === control;
+    reordering.current = true;
+    try {
+      flow.publish(
+        await flow.actions.reorderTask(
+          task.id,
+          target.id,
+          direction,
+          props.hideCompleted,
+        ),
+      );
+      if (wasFocused) {
+        const row = document.querySelector<HTMLElement>(
+          `[data-task-id="${task.id}"]`,
+        );
+        const next = row?.querySelector<HTMLButtonElement>(
+          `[data-direction="${direction}"]`,
+        );
+        if (next && !next.disabled) next.focus();
+        else row?.querySelector<HTMLButtonElement>(".task-title")?.focus();
+      }
+      flow.showStatus("Порядок сохранён");
+    } catch {
+      if (wasFocused) control.focus();
+      flow.showStatus("Порядок не сохранён. Повторите действие.");
+    } finally {
+      reordering.current = false;
+    }
+  };
+
   return (
     <li
       className={`task-row${task.completed ? " completed" : ""}`}
@@ -104,6 +152,32 @@ function TaskRow(props: {
       >
         {task.title}
       </button>
+      <div className="task-order">
+        <button
+          type="button"
+          data-direction="before"
+          aria-label={`Выше: ${task.title}`}
+          disabled={!props.before}
+          ref={(button) => {
+            directionRefs.current.set("before", button);
+          }}
+          onClick={() => void reorder("before")}
+        >
+          Выше
+        </button>
+        <button
+          type="button"
+          data-direction="after"
+          aria-label={`Ниже: ${task.title}`}
+          disabled={!props.after}
+          ref={(button) => {
+            directionRefs.current.set("after", button);
+          }}
+          onClick={() => void reorder("after")}
+        >
+          Ниже
+        </button>
+      </div>
     </li>
   );
 }
@@ -117,6 +191,29 @@ export function TaskContainer(props: TaskContainerProps) {
     (first, second) =>
       first.order - second.order || first.id.localeCompare(second.id),
   );
+  const visible = tasks.filter(
+    (task) => !props.hideCompleted || !task.completed,
+  );
+
+  useEffect(() => {
+    const section = props.sectionRef.current;
+    if (!section) return;
+    return attachTaskDropTarget(
+      section,
+      props.placement,
+      props.hideCompleted,
+      props.flow.actions,
+      props.flow.publish,
+      props.flow.showStatus,
+    );
+  }, [
+    props.sectionRef,
+    props.placement,
+    props.hideCompleted,
+    props.flow.actions,
+    props.flow.publish,
+    props.flow.showStatus,
+  ]);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -139,19 +236,24 @@ export function TaskContainer(props: TaskContainerProps) {
   return (
     <>
       <ul aria-label={`Задачи: ${props.label}`}>
-        {tasks.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
-            hidden={
-              props.hideCompleted &&
-              task.completed &&
-              !props.revealed.has(task.id)
-            }
-            hideCompleted={props.hideCompleted}
-            flow={props.flow}
-          />
-        ))}
+        {tasks.map((task) => {
+          const index = visible.findIndex((entry) => entry.id === task.id);
+          return (
+            <TaskRow
+              key={task.id}
+              task={task}
+              hidden={
+                props.hideCompleted &&
+                task.completed &&
+                !props.revealed.has(task.id)
+              }
+              hideCompleted={props.hideCompleted}
+              before={visible[index - 1]}
+              after={visible[index + 1]}
+              flow={props.flow}
+            />
+          );
+        })}
       </ul>
       <form onSubmit={(event) => void submit(event)}>
         <input

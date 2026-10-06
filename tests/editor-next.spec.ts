@@ -12,9 +12,9 @@ test("редактор сохраняет буквальный текст, цв�
   await input.press("Enter");
   await page.getByRole("button", { name: "Черновик", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Редактор задачи" });
-  await expect(dialog.getByLabel("Размещение")).toHaveCount(0);
-  await expect(dialog.getByLabel("Дата задачи")).toHaveCount(0);
-  await expect(dialog.getByLabel("Список задачи")).toHaveCount(0);
+  await expect(dialog.getByLabel("Размещение")).toHaveValue("date");
+  await expect(dialog.getByLabel("Дата задачи")).toBeVisible();
+  await expect(dialog.getByLabel("Список задачи")).toBeHidden();
   await dialog
     .getByRole("textbox", { name: "Название", exact: true })
     .fill("  План ✨  ");

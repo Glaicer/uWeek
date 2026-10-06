@@ -21,6 +21,7 @@
     "test:next-editor": "playwright test --config playwright.next-editor.config.ts",
     "test:next-lists": "playwright test --config playwright.next-lists.config.ts",
     "test:next-csv": "playwright test --config playwright.next-csv.config.ts",
+    "test:next-placement": "playwright test --config playwright.next-placement.config.ts",
     "lint": "eslint .",
     "format:check": "prettier --check src app tests scripts *.json *.ts *.mjs index.html README.md",
     "test:browser": "playwright test"

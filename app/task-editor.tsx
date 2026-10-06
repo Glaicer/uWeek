@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { provideTaskEditor, type TaskActions } from "../src/editor";
 import { taskColors } from "../src/model";
-import type { ChecklistItem, Task, TaskColor, TaskEdits } from "../src/model";
+import type {
+  ChecklistItem,
+  SomedayList,
+  Task,
+  TaskColor,
+  TaskEdits,
+} from "../src/model";
 
 interface TaskEditorRequest {
   task: Task;
@@ -75,11 +81,19 @@ function TaskEditorDialog(props: {
       .map((item) => ({ ...item }))
       .sort((first, second) => first.order - second.order),
   );
+  const [placement, setPlacement] = useState<"date" | "list">(
+    task.placement.date ? "date" : "list",
+  );
+  const [date, setDate] = useState(task.placement.date ?? "");
+  const [listId, setListId] = useState(task.placement.listId ?? "");
+  const [lists, setLists] = useState<SomedayList[] | null>(null);
   const [alert, setAlert] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
+  const dateInput = useRef<HTMLInputElement>(null);
+  const listSelect = useRef<HTMLSelectElement>(null);
 
   const [initial] = useState(() => JSON.stringify(draft()));
 
@@ -89,11 +103,30 @@ function TaskEditorDialog(props: {
       notes,
       color: (color || undefined) as TaskColor | undefined,
       completed,
+      placement:
+        placement === "date"
+          ? { date }
+          : { listId: listId || lists?.[0]?.id || "" },
       ...(task.checklist !== undefined || items.length
         ? { checklist: items.map((item) => ({ ...item })) }
         : {}),
     };
   }
+
+  useEffect(() => {
+    let stale = false;
+    actions
+      .readLists()
+      .then((next) => {
+        if (!stale) setLists(next);
+      })
+      .catch(() => {
+        if (!stale) setAlert("Редактор не открыт. Повторите действие.");
+      });
+    return () => {
+      stale = true;
+    };
+  }, [actions]);
 
   useEffect(() => {
     const element = dialog.current;
@@ -162,6 +195,14 @@ function TaskEditorDialog(props: {
     if (empty !== -1) {
       setAlert("Введите непустой текст пункта чек-листа");
       document.getElementById(`checklist-${items[empty].id}`)?.focus();
+      return;
+    }
+    if (placement === "date" && !dateInput.current?.checkValidity()) {
+      dateInput.current?.reportValidity();
+      return;
+    }
+    if (placement === "list" && !listSelect.current?.checkValidity()) {
+      listSelect.current?.reportValidity();
       return;
     }
     void save(false);
@@ -289,6 +330,50 @@ function TaskEditorDialog(props: {
           />
           Выполнена
         </label>
+        <label htmlFor="editor-placement">Размещение</label>
+        <select
+          id="editor-placement"
+          name="placement"
+          value={placement}
+          disabled={busy}
+          onChange={(event) =>
+            setPlacement(event.target.value as "date" | "list")
+          }
+        >
+          <option value="date">Дата</option>
+          <option value="list">Когда-нибудь</option>
+        </select>
+        <div hidden={placement !== "date"}>
+          <label htmlFor="editor-date">Дата задачи</label>
+          <input
+            ref={dateInput}
+            id="editor-date"
+            name="date"
+            type="date"
+            value={date}
+            required={placement === "date"}
+            disabled={busy}
+            onChange={(event) => setDate(event.target.value)}
+          />
+        </div>
+        <div hidden={placement !== "list"}>
+          <label htmlFor="editor-list">Список задачи</label>
+          <select
+            ref={listSelect}
+            id="editor-list"
+            name="listId"
+            value={listId || lists?.[0]?.id || ""}
+            required={placement === "list"}
+            disabled={busy}
+            onChange={(event) => setListId(event.target.value)}
+          >
+            {(lists ?? []).map((list) => (
+              <option key={list.id} value={list.id}>
+                {list.title}
+              </option>
+            ))}
+          </select>
+        </div>
         <section aria-labelledby="checklist-title">
           <h3 id="checklist-title">Чек-лист</h3>
           <ol className="checklist">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SomedayList, Task } from "../src/model";
 import { TaskContainer, type TaskFlow } from "./task-container";
 
@@ -24,6 +24,8 @@ function ListSection(props: {
   const [removing, setRemoving] = useState(false);
   const renameRef = useRef<HTMLInputElement>(null);
   const renameToggleRef = useRef<HTMLButtonElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const placement = useMemo(() => ({ listId: props.list.id }), [props.list.id]);
 
   useEffect(() => {
     if (renaming) renameRef.current?.focus();
@@ -64,6 +66,7 @@ function ListSection(props: {
 
   return (
     <section
+      ref={sectionRef}
       data-list-id={props.list.id}
       aria-label={`Список: ${props.list.title}`}
     >
@@ -102,11 +105,12 @@ function ListSection(props: {
       </form>
       <TaskContainer
         label={props.list.title}
-        placement={{ listId: props.list.id }}
+        placement={placement}
         tasks={props.tasks}
         createTask={props.createTask}
         hideCompleted={props.hideCompleted}
         revealed={props.revealed}
+        sectionRef={sectionRef}
         flow={props.flow}
       />
     </section>
