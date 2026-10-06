@@ -1,12 +1,9 @@
-import type { Task } from "./model";
+import type { SomedayList, Task, TaskEdits } from "./model";
 
 export interface TaskActions {
-  updateTask: (
-    id: string,
-    edits: Partial<import("./model").TaskEdits>,
-  ) => Promise<Task>;
+  updateTask: (id: string, edits: Partial<TaskEdits>) => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
-  readLists: () => Promise<import("./model").SomedayList[]>;
+  readLists: () => Promise<SomedayList[]>;
   taskChanges: EventTarget;
   reorderTask: (
     id: string,
