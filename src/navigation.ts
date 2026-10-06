@@ -3,6 +3,7 @@ import { calendarDate, currentWeek } from "./calendar";
 import type { PlannerStorage } from "./storage";
 import { mountData } from "./data-ui";
 import { mountSearch } from "./search";
+import { openLegacyTaskEditor, provideTaskEditor } from "./editor";
 import type { Task } from "./model";
 
 function localDate(value: string): Date {
@@ -14,6 +15,7 @@ export async function startNavigation(
   root: HTMLElement,
   storage: PlannerStorage,
 ): Promise<void> {
+  provideTaskEditor(openLegacyTaskEditor);
   const savedWeek = await storage.readSelectedWeek();
   let selected = localDate(savedWeek ?? calendarDate(new Date()));
   if (!savedWeek) await storage.saveSelectedWeek(calendarDate(selected));

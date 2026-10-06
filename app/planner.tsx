@@ -17,6 +17,7 @@ import { PlannerStorage } from "../src/storage";
 import { DaySection } from "./day-section";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
+import { TaskEditor } from "./task-editor";
 
 const bootStatus = "Загрузка планера…";
 const bootError =
@@ -78,10 +79,12 @@ export function Planner() {
 
   const removeTask = useCallback(
     (id: string) => {
-      putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
-      listTasksRef.current = listTasksRef.current.filter(
-        (task) => task.id !== id,
-      );
+      flushSync(() => {
+        putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
+        listTasksRef.current = listTasksRef.current.filter(
+          (task) => task.id !== id,
+        );
+      });
     },
     [putWeekTasks],
   );
@@ -501,6 +504,7 @@ export function Planner() {
         <h2 id="someday-title">Когда-нибудь</h2>
         <div className="lists" />
       </section>
+      <TaskEditor />
     </main>
   );
 }
