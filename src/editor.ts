@@ -13,7 +13,30 @@ export interface TaskActions {
   ) => Promise<Task[]>;
 }
 
+export type TaskEditorOpener = (
+  task: Task,
+  trigger: HTMLElement,
+  actions: TaskActions,
+  changed: (task: Task | null) => void,
+) => Promise<void>;
+
+let taskEditor: TaskEditorOpener | null = null;
+
+export function provideTaskEditor(opener: TaskEditorOpener | null): void {
+  taskEditor = opener;
+}
+
 export async function openTaskEditor(
+  task: Task,
+  trigger: HTMLElement,
+  actions: TaskActions,
+  changed: (task: Task | null) => void,
+): Promise<void> {
+  if (!taskEditor) throw new Error("Редактор недоступен. Повторите действие.");
+  return taskEditor(task, trigger, actions, changed);
+}
+
+export async function openLegacyTaskEditor(
   task: Task,
   trigger: HTMLElement,
   actions: TaskActions,

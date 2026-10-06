@@ -15,6 +15,7 @@ import { PlannerStorage } from "../src/storage";
 import { DataSection } from "./data-section";
 import { DaySection } from "./day-section";
 import { SomedaySection } from "./someday-section";
+import { TaskEditor } from "./task-editor";
 import { WeekNavigation } from "./week-navigation";
 import type { TaskFlow } from "./task-container";
 
@@ -84,8 +85,10 @@ export function Planner() {
 
   const removeTask = useCallback(
     (id: string) => {
-      putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
-      putListTasks(listTasksRef.current.filter((task) => task.id !== id));
+      flushSync(() => {
+        putWeekTasks(weekTasksRef.current.filter((task) => task.id !== id));
+        putListTasks(listTasksRef.current.filter((task) => task.id !== id));
+      });
     },
     [putListTasks, putWeekTasks],
   );
@@ -514,6 +517,7 @@ export function Planner() {
           showStatus={showStatus}
         />
       )}
+      <TaskEditor />
     </main>
   );
 }
