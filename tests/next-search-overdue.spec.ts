@@ -43,9 +43,8 @@ test("просроченные — только невыполненные с д
   ).toHaveValue("маркер");
 });
 
-// Размещение (дата/список) в React-редакторе появляется в №05; перенос
-// просроченной задачи через новое размещение проверяется после №05
-// (граница из тикета 06).
+// Размещение (дата/список) в React-редакторе появилось в №05; здесь
+// проверяется перенос просроченной задачи через него.
 test("перенос просроченной задачи на сегодня через редактор убирает её из просроченных", async ({
   page,
 }) => {
@@ -72,10 +71,7 @@ test("перенос просроченной задачи на сегодня �
     .getByRole("button", { name: "Вчера маркер", exact: true })
     .click();
   const editor = page.getByRole("dialog", { name: "Редактор задачи" });
-  test.skip(
-    (await editor.getByLabel("Размещение", { exact: true }).count()) === 0,
-    "Размещение и дата задачи в редакторе появляются в №05",
-  );
+  await expect(editor.getByLabel("Размещение", { exact: true })).toHaveCount(1);
   await editor.getByLabel("Дата задачи", { exact: true }).fill("2026-10-06");
   await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(editor).toHaveCount(0);

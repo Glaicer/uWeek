@@ -106,9 +106,7 @@ test("переход к задаче из поиска открывает спи
   await expect(listTitle).toBeFocused();
 });
 
-// Перенос задачи в список через новое размещение редактора появляется в №05;
-// до его объединения проверка пропускается, после — выполняется целиком
-// (граница из тикета 06).
+// Перенос задачи в список через размещение редактора (появилось в №05).
 test("перенос задачи в список через редактор обновляет выдачу и переход открывает список", async ({
   page,
 }) => {
@@ -122,10 +120,7 @@ test("перенос задачи в список через редактор о
     .getByRole("button", { name: "Маркер план", exact: true })
     .click();
   const editor = page.getByRole("dialog", { name: "Редактор задачи" });
-  test.skip(
-    (await editor.getByLabel("Размещение", { exact: true }).count()) === 0,
-    "Размещение в редакторе появляется в №05",
-  );
+  await expect(editor.getByLabel("Размещение", { exact: true })).toHaveCount(1);
   await editor.getByLabel("Размещение", { exact: true }).selectOption("list");
   await editor
     .getByLabel("Список задачи", { exact: true })
