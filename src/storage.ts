@@ -4,11 +4,14 @@ import {
   type SomedayList,
   type Task,
   type TaskEdits,
+  type ImportHistory,
+  type PlannerSnapshot,
 } from "./model";
 import { samePlacement, validPlacement } from "./placement";
+import type { CsvPreview } from "./csv";
 
 const databaseName = "yourweek";
-const schemaVersion = 2;
+const schemaVersion = 3;
 
 function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -49,6 +52,11 @@ export class PlannerStorage {
         if (!database.objectStoreNames.contains("navigation")) {
           database.createObjectStore("navigation");
         }
+        if (!database.objectStoreNames.contains("importHistory")) {
+          database.createObjectStore("importHistory", {
+            keyPath: "fingerprint",
+          });
+        }
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -57,6 +65,154 @@ export class PlannerStorage {
     });
     database.onversionchange = () => database.close();
     return new PlannerStorage(database);
+  }
+
+  async readSnapshot(): Promise<PlannerSnapshot> {
+    const transaction = this.database.transaction(
+      ["tasks", "lists", "settings", "navigation", "importHistory"],
+      "readonly",
+    );
+    const done = transactionDone(transaction);
+    const [tasks, lists, settings, hideCompleted, selectedWeek, importHistory] =
+      await Promise.all([
+        requestResult<Task[]>(transaction.objectStore("tasks").getAll()),
+        requestResult<SomedayList[]>(transaction.objectStore("lists").getAll()),
+        requestResult<PlannerSettings | undefined>(
+          transaction.objectStore("settings").get("planner"),
+        ),
+        requestResult<boolean | undefined>(
+          transaction.objectStore("settings").get("hideCompleted"),
+        ),
+        requestResult<string | undefined>(
+          transaction.objectStore("navigation").get("selectedWeek"),
+        ),
+        requestResult<ImportHistory[]>(
+          transaction.objectStore("importHistory").getAll(),
+        ),
+        done,
+      ]);
+    return {
+      tasks,
+      lists,
+      settings: settings ?? { weekStartsOn: 1 },
+      hideCompleted: hideCompleted ?? false,
+      selectedWeek,
+      importHistory,
+    };
+  }
+
+  async readImportHistory(): Promise<ImportHistory[]> {
+    const transaction = this.database.transaction("importHistory", "readonly");
+    const done = transactionDone(transaction);
+    const [history] = await Promise.all([
+      requestResult<ImportHistory[]>(
+        transaction.objectStore("importHistory").getAll(),
+      ),
+      done,
+    ]);
+    return history;
+  }
+
+  async commitCsv(
+    preview: CsvPreview,
+  ): Promise<{ addedTasks: number; emptyRecords: number; repeated: boolean }> {
+    const tasks: Task[] = preview.records.map((record) => ({
+      id: crypto.randomUUID(),
+      title: record.title,
+      notes: record.notes,
+      completed: record.completed,
+      placement: record.date ? { date: record.date } : { listId: "" },
+      order: 0,
+      provenance: {
+        fingerprint: preview.fingerprint,
+        recordNumber: record.recordNumber,
+        fields: record.fields,
+      },
+    }));
+    const history: ImportHistory = {
+      fingerprint: preview.fingerprint,
+      importedAt: new Date().toISOString(),
+      addedTasks: tasks.length,
+      emptyRecords: preview.emptyRecords,
+    };
+    const transaction = this.database.transaction(
+      ["tasks", "lists", "importHistory"],
+      "readwrite",
+    );
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("tasks");
+    const histories = transaction.objectStore("importHistory");
+    let repeated = false;
+    const check = histories.get(preview.fingerprint);
+    check.onsuccess = () => {
+      if (check.result) {
+        repeated = true;
+        return;
+      }
+      const listStore = transaction.objectStore("lists");
+      const currentLists = listStore.getAll();
+      currentLists.onsuccess = () => {
+        const current = store.getAll();
+        current.onsuccess = () => {
+          try {
+            const lists = currentLists.result as SomedayList[];
+            const destinations = new Map<string, string>();
+            let nextListOrder =
+              Math.max(-1, ...lists.map((list) => list.order)) + 1;
+            for (const title of preview.listTitles) {
+              const key = title.toLowerCase();
+              let list = lists.find(
+                (list) => list.title.trim().toLowerCase() === key,
+              );
+              if (!list) {
+                list = {
+                  id: crypto.randomUUID(),
+                  title,
+                  order: nextListOrder++,
+                };
+                lists.push(list);
+                listStore.add(list);
+              }
+              destinations.set(key, list.id);
+            }
+            const nextOrders = new Map<string, number>();
+            for (const task of current.result as Task[]) {
+              const key =
+                task.placement.date !== undefined
+                  ? `date:${task.placement.date}`
+                  : `list:${task.placement.listId}`;
+              nextOrders.set(
+                key,
+                Math.max(nextOrders.get(key) ?? 0, task.order + 1),
+              );
+            }
+            for (const [index, task] of tasks.entries()) {
+              const record = preview.records[index];
+              if (record.listTitle !== undefined)
+                task.placement = {
+                  listId: destinations.get(record.listTitle.toLowerCase())!,
+                };
+              const key =
+                task.placement.date !== undefined
+                  ? `date:${task.placement.date}`
+                  : `list:${task.placement.listId}`;
+              task.order = nextOrders.get(key) ?? 0;
+              nextOrders.set(key, task.order + 1);
+              store.add(task);
+            }
+            histories.add(history);
+          } catch {
+            transaction.abort();
+          }
+        };
+      };
+    };
+    await done;
+    return {
+      addedTasks: repeated ? 0 : tasks.length,
+      emptyRecords: preview.emptyRecords,
+      repeated,
+    };
   }
 
   async readSettings(): Promise<PlannerSettings> {
