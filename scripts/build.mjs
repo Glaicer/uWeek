@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
-import { copyFile, readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import process from "node:process";
-import { pathToFileURL, URL } from "node:url";
-import { build } from "vite";
 
 export async function generateShell(directory) {
   const entries = await readdir(directory, {
@@ -37,28 +34,4 @@ export async function generateShell(directory) {
       .replace("__SHELL_VERSION__", version),
   );
   return { version, files };
-}
-
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
-  let output;
-  await build({
-    plugins: [
-      {
-        name: "offline-output",
-        configResolved(config) {
-          output = resolve(config.root, config.build.outDir);
-        },
-      },
-    ],
-  });
-  for (const file of ["LICENSE", "THIRD_PARTY_NOTICES.md"]) {
-    await copyFile(
-      new URL(`../${file}`, import.meta.url),
-      resolve(output, file),
-    );
-  }
-  await generateShell(output);
 }

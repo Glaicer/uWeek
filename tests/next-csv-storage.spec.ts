@@ -6,12 +6,10 @@ const header = "Date,Task,Notes,Checklist,Completed,List";
 test("public storage commits after current day order and preserves provenance through edits", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dev-storage");
+  await page.waitForFunction(() => Boolean(window.__yourweekDevStorage));
   const result = await page.evaluate(async (header) => {
-    const storagePath = "/src/storage.ts";
-    const csvPath = "/src/csv.ts";
-    const { PlannerStorage } = await import(storagePath);
-    const { prepareCsv } = await import(csvPath);
+    const { PlannerStorage, prepareCsv } = window.__yourweekDevStorage!;
     const storage = await PlannerStorage.open();
     const preview = await prepareCsv(
       new Blob([
@@ -44,9 +42,9 @@ test("public storage commits after current day order and preserves provenance th
     new Set(result.before.map((task: { id: string }) => task.id)).size,
   ).toBe(3);
   expect(result.after[1].provenance).toEqual(result.before[1].provenance);
-  expect(result.after[1].provenance.recordNumber).toBe(2);
-  expect(result.after[2].provenance.recordNumber).toBe(4);
-  expect(result.after[1].provenance.fields).toEqual({
+  expect(result.after[1].provenance!.recordNumber).toBe(2);
+  expect(result.after[2].provenance!.recordNumber).toBe(4);
+  expect(result.after[1].provenance!.fields).toEqual({
     Date: "2026-10-05",
     Task: "  Source  ",
     Notes: "Original",
@@ -56,7 +54,7 @@ test("public storage commits after current day order and preserves provenance th
   });
   expect(result.history).toHaveLength(1);
   expect(result.history[0]).toMatchObject({
-    fingerprint: result.after[1].provenance.fingerprint,
+    fingerprint: result.after[1].provenance!.fingerprint,
     addedTasks: 2,
     emptyRecords: 1,
   });
@@ -65,13 +63,11 @@ test("public storage commits after current day order and preserves provenance th
 test("original SHA-256 bytes, not normalized text or filename, define identity; concurrent confirmations are serialized", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dev-storage");
+  await page.waitForFunction(() => Boolean(window.__yourweekDevStorage));
   const csv = `${header}\n2026-10-05,Identity,,,FALSE,`;
   const result = await page.evaluate(async (csv) => {
-    const storagePath = "/src/storage.ts";
-    const csvPath = "/src/csv.ts";
-    const { PlannerStorage } = await import(storagePath);
-    const { prepareCsv } = await import(csvPath);
+    const { PlannerStorage, prepareCsv } = window.__yourweekDevStorage!;
     const storage = await PlannerStorage.open();
     const lf = await prepareCsv(new Blob([csv]));
     const bom = await prepareCsv(new Blob(["\ufeff" + csv]));
@@ -106,10 +102,10 @@ test("original SHA-256 bytes, not normalized text or filename, define identity; 
 test("preview accepts the exact limits and validates records beyond the first twenty", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dev-storage");
+  await page.waitForFunction(() => Boolean(window.__yourweekDevStorage));
   const result = await page.evaluate(async (header) => {
-    const csvPath = "/src/csv.ts";
-    const { prepareCsv } = await import(csvPath);
+    const { prepareCsv } = window.__yourweekDevStorage!;
     const row = "2026-10-05,Limit,,,FALSE,";
     const records = await prepareCsv(
       new Blob([header + "\n" + Array(100_000).fill(row).join("\n")]),
@@ -135,12 +131,10 @@ test("preview accepts the exact limits and validates records beyond the first tw
 test("undated confirmation reconciles prepared names with current lists and order while preserving source records", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dev-storage");
+  await page.waitForFunction(() => Boolean(window.__yourweekDevStorage));
   const result = await page.evaluate(async (header) => {
-    const storagePath = "/src/storage.ts";
-    const csvPath = "/src/csv.ts";
-    const { PlannerStorage } = await import(storagePath);
-    const { prepareCsv } = await import(csvPath);
+    const { PlannerStorage, prepareCsv } = window.__yourweekDevStorage!;
     const storage = await PlannerStorage.open();
     const old = await storage.createList("Проекты");
     const preview = await prepareCsv(
@@ -171,7 +165,7 @@ test("undated confirmation reconciles prepared names with current lists and orde
   }, header);
   const tasks = result.before.tasks
     .filter(
-      (task: { placement: { listId: string } }) =>
+      (task) =>
         task.placement.listId === result.current.id,
     )
     .sort((a: { order: number }, b: { order: number }) => a.order - b.order);
@@ -190,11 +184,10 @@ test("undated confirmation reconciles prepared names with current lists and orde
     tasks
       .slice(1)
       .map(
-        (task: { provenance: { recordNumber: number } }) =>
-          task.provenance.recordNumber,
+        (task) => task.provenance!.recordNumber,
       ),
   ).toEqual([2, 4]);
-  expect(tasks[1].provenance.fields).toEqual({
+  expect(tasks[1].provenance!.fields).toEqual({
     Date: "",
     Task: "  Source  ",
     Notes: "Original",
@@ -203,18 +196,18 @@ test("undated confirmation reconciles prepared names with current lists and orde
     List: "  проекты  ",
   });
   expect(
-    result.after.tasks.find((task: { id: string }) => task.id === tasks[1].id)
+    result.after.tasks.find((task) => task.id === tasks[1].id)!
       .provenance,
   ).toEqual(tasks[1].provenance);
   expect(
     result.before.tasks.find(
-      (task: { title: string }) => task.title === "Old task",
-    ).placement,
+      (task) => task.title === "Old task",
+    )!.placement,
   ).toEqual({ listId: result.old.id });
   expect(
     result.before.tasks.find(
-      (task: { title: string }) => task.title === "Created later",
-    ).placement,
+      (task) => task.title === "Created later",
+    )!.placement,
   ).toEqual({ listId: result.work.id });
   expect(
     result.before.lists
@@ -231,10 +224,10 @@ test("undated confirmation reconciles prepared names with current lists and orde
 test("public storage rejects blank checklist drafts and shares creation defaults for days and lists", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dev-storage");
+  await page.waitForFunction(() => Boolean(window.__yourweekDevStorage));
   const result = await page.evaluate(async () => {
-    const storagePath = "/src/storage.ts";
-    const { PlannerStorage } = await import(storagePath);
+    const { PlannerStorage } = window.__yourweekDevStorage!;
     const storage = await PlannerStorage.open();
     const list = (await storage.readLists())[0];
     const day = await storage.createTask("  Day  ", "2044-02-29");

@@ -1,6 +1,6 @@
 import { chromium, expect, test } from "@playwright/test";
 
-const url = "http://127.0.0.1:4203";
+const url = "http://127.0.0.1:4171";
 const bootError =
   "Локальная база недоступна. Задачи не загружены. Разрешите хранение данных в этом браузере и повторите попытку.";
 

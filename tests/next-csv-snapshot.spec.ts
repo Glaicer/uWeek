@@ -3,12 +3,10 @@ import { test, expect } from "@playwright/test";
 test("one public snapshot includes tasks, lists, preferences, navigation and successful import history", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/dev-storage");
+  await page.waitForFunction(() => Boolean(window.__yourweekDevStorage));
   const snapshot = await page.evaluate(async () => {
-    const storagePath = "/src/storage.ts";
-    const csvPath = "/src/csv.ts";
-    const { PlannerStorage } = await import(storagePath);
-    const { prepareCsv } = await import(csvPath);
+    const { PlannerStorage, prepareCsv } = window.__yourweekDevStorage!;
     const storage = await PlannerStorage.open();
     await storage.saveSettings({ weekStartsOn: 0 });
     await storage.saveHideCompleted(true);
@@ -29,6 +27,6 @@ test("one public snapshot includes tasks, lists, preferences, navigation and suc
   expect(snapshot.selectedWeek).toBe("2041-02-24");
   expect(snapshot.importHistory).toHaveLength(1);
   expect(snapshot.importHistory[0].fingerprint).toBe(
-    snapshot.tasks[0].provenance.fingerprint,
+    snapshot.tasks[0].provenance!.fingerprint,
   );
 });

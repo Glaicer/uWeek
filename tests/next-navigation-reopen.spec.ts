@@ -11,7 +11,7 @@ test("перезапуск сохраняет воскресное начало 
   try {
     let page = context.pages()[0];
     await page.clock.setFixedTime(new Date("2026-10-05T12:00:00+14:00"));
-    await page.goto("http://127.0.0.1:4211");
+    await page.goto("http://127.0.0.1:4171");
     await page.getByLabel("Начало недели").selectOption("0");
     await page.getByLabel("Перейти к дате").fill("2040-01-01");
     await page.getByLabel("Перейти к дате").press("Enter");
@@ -27,7 +27,7 @@ test("перезапуск сохраняет воскресное начало 
     });
     page = context.pages()[0];
     await page.clock.setFixedTime(new Date("2026-10-05T12:00:00-07:00"));
-    await page.goto("http://127.0.0.1:4211");
+    await page.goto("http://127.0.0.1:4171");
     await expect(page.getByLabel("Начало недели")).toHaveValue("0");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "1 января 2040 – 7 января 2040",

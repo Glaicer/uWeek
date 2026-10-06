@@ -14,7 +14,7 @@ for (const width of [360, 1200]) {
       "https://example.invalid/secret";
     const externalRequests: string[] = [];
     page.on("request", (request) => {
-      if (!request.url().startsWith("http://127.0.0.1:4211"))
+      if (!request.url().startsWith("http://127.0.0.1:4171"))
         externalRequests.push(request.url());
     });
     const input = days.first().getByRole("textbox");
