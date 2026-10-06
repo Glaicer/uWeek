@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: ["next-launch-strict-mode.spec.ts"],
+  testMatch: ["next-launch-strict-mode.spec.ts", "next-dev-offline.spec.ts"],
   use: { baseURL: "http://127.0.0.1:4202", timezoneId: "Europe/Moscow" },
   webServer: {
     command: "pnpm exec next dev --hostname 127.0.0.1 --port 4202",
