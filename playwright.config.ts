@@ -6,6 +6,8 @@ export default defineConfig({
     "csv-storage.spec.ts",
     "csv-snapshot.spec.ts",
     "migration-acceptance.spec.ts",
+    "next-launch.spec.ts",
+    "next-launch-strict-mode.spec.ts",
   ],
   use: { baseURL: "http://127.0.0.1:4171", timezoneId: "Europe/Moscow" },
   webServer: {
