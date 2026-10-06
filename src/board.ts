@@ -40,6 +40,7 @@ export function renderBoard(
       await actions.saveHideCompleted(filter.checked);
       actions.hideCompleted = filter.checked;
       applyFilter();
+      actions.taskChanges.dispatchEvent(new CustomEvent("filter"));
       status.textContent = "Настройка сохранена";
     } catch {
       filter.checked = actions.hideCompleted;
@@ -57,6 +58,7 @@ export function renderBoard(
     }).format(day);
     const section = document.createElement("section");
     section.className = "day";
+    section.dataset.date = date;
     section.setAttribute("aria-label", label);
     if (date === today) section.classList.add("today");
     const heading = document.createElement("h2");

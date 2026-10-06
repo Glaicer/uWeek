@@ -52,7 +52,9 @@ test("списки добавляются в конец, переименовы�
     name: "Список: Проекты",
     exact: true,
   });
-  await expect(projects.getByRole("listitem")).toHaveText("Не потерять");
+  await expect(
+    projects.getByRole("listitem").locator(".task-title"),
+  ).toHaveText("Не потерять");
   await projects
     .getByRole("checkbox", { name: "Выполнена: Не потерять" })
     .check();

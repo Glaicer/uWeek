@@ -29,17 +29,22 @@ test("повторное открытие профиля сохраняет пе
     await expect(
       page
         .getByRole("region", { name: "Список: Позже", exact: true })
-        .getByRole("listitem"),
+        .getByRole("listitem")
+        .locator(".task-title"),
     ).toHaveText("Когда будет время");
     await context.close();
     context = await chromium.launchPersistentContext(profile);
     page = context.pages()[0];
     await page.goto(testInfo.project.use.baseURL!);
     ideas = page.getByRole("region", { name: "Список: Позже", exact: true });
-    await expect(ideas.getByRole("listitem")).toHaveText("Когда будет время");
+    await expect(ideas.getByRole("listitem").locator(".task-title")).toHaveText(
+      "Когда будет время",
+    );
     await expect(page.locator(".week").getByRole("listitem")).toHaveCount(0);
     await page.getByRole("button", { name: "Предыдущая неделя" }).click();
-    await expect(ideas.getByRole("listitem")).toHaveText("Когда будет время");
+    await expect(ideas.getByRole("listitem").locator(".task-title")).toHaveText(
+      "Когда будет время",
+    );
     await expect(page.locator(".week").getByRole("listitem")).toHaveCount(0);
   } finally {
     await context.close();

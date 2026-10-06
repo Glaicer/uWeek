@@ -22,7 +22,7 @@ test("задачи без даты используют быстрый ввод,
   ).toBeVisible();
   await input.fill("Вторая идея");
   await input.press("Enter");
-  await expect(inbox.getByRole("listitem")).toHaveText([
+  await expect(inbox.getByRole("listitem").locator(".task-title")).toHaveText([
     "Будущая идея",
     "Вторая идея",
   ]);
@@ -34,7 +34,7 @@ test("задачи без даты используют быстрый ввод,
   await editor.getByLabel("Цвет").selectOption("green");
   await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
   await page.getByRole("button", { name: "Следующая неделя" }).click();
-  await expect(inbox.getByRole("listitem")).toHaveText([
+  await expect(inbox.getByRole("listitem").locator(".task-title")).toHaveText([
     "Будущая идея",
     "Вторая идея",
   ]);

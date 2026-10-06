@@ -28,7 +28,7 @@ export const taskColors = {
 export type TaskColor = keyof typeof taskColors;
 export type TaskEdits = Pick<
   Task,
-  "title" | "notes" | "color" | "completed" | "checklist"
+  "title" | "notes" | "color" | "completed" | "checklist" | "placement"
 >;
 
 export interface ChecklistItem {

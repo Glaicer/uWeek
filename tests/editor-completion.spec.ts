@@ -18,12 +18,18 @@ test("выполнение и фильтр сохраняются без изм�
   const filter = page.getByRole("checkbox", { name: "Скрыть выполненные" });
   await filter.check();
   await expect(page.getByRole("status")).toHaveText("Настройка сохранена");
-  await expect(monday.getByRole("listitem")).toHaveText(["Первая", "Третья"]);
+  await expect(monday.getByRole("listitem").locator(".task-title")).toHaveText([
+    "Первая",
+    "Третья",
+  ]);
   await page.reload();
   await expect(filter).toBeChecked();
-  await expect(monday.getByRole("listitem")).toHaveText(["Первая", "Третья"]);
+  await expect(monday.getByRole("listitem").locator(".task-title")).toHaveText([
+    "Первая",
+    "Третья",
+  ]);
   await filter.uncheck();
-  await expect(monday.getByRole("listitem")).toHaveText([
+  await expect(monday.getByRole("listitem").locator(".task-title")).toHaveText([
     "Первая",
     "Вторая",
     "Третья",
@@ -56,5 +62,8 @@ test("выполнение и фильтр сохраняются без изм�
   await expect(dialog).not.toBeVisible();
   await expect(filter).toBeFocused();
   await page.reload();
-  await expect(monday.getByRole("listitem")).toHaveText(["Первая", "Третья"]);
+  await expect(monday.getByRole("listitem").locator(".task-title")).toHaveText([
+    "Первая",
+    "Третья",
+  ]);
 });

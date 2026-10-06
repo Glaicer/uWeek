@@ -35,7 +35,8 @@ test("перезапуск сохраняет воскресное начало 
     await expect(
       page
         .getByRole("region", { name: "воскресенье, 1 января" })
-        .getByRole("listitem"),
+        .getByRole("listitem")
+        .locator(".task-title"),
     ).toHaveText("Первый день 2040");
     await page.getByRole("button", { name: "Сегодня", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -43,7 +44,9 @@ test("перезапуск сохраняет воскресное начало 
     );
     await page.getByLabel("Перейти к дате").fill("2040-01-01");
     await page.getByLabel("Перейти к дате").press("Enter");
-    await expect(page.getByRole("listitem")).toHaveText("Первый день 2040");
+    await expect(page.getByRole("listitem").locator(".task-title")).toHaveText(
+      "Первый день 2040",
+    );
   } finally {
     await context.close();
   }

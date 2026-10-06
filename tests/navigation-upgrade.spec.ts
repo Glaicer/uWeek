@@ -40,7 +40,9 @@ test("обновление схемы версии 1 сохраняет суще
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "5 октября 2026 – 11 октября 2026",
   );
-  await expect(page.getByRole("listitem")).toHaveText("Задача до обновления");
+  await expect(page.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Задача до обновления",
+  );
   await expect(page.getByRole("heading", { name: "Мой список" })).toBeVisible();
   await page.getByLabel("Начало недели").selectOption("0");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -58,7 +60,9 @@ test("обновление схемы версии 1 сохраняет суще
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "4 октября 2026 – 10 октября 2026",
   );
-  await expect(page.getByRole("listitem")).toHaveText("Задача до обновления");
+  await expect(page.getByRole("listitem").locator(".task-title")).toHaveText(
+    "Задача до обновления",
+  );
   await expect(page.getByRole("heading", { name: "Мой список" })).toBeVisible();
   await expect(page.getByLabel("Начало недели")).toHaveValue("0");
 });

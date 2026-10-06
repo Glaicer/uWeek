@@ -42,6 +42,10 @@ export async function startNavigation(
         saveHideCompleted: (value) => storage.saveHideCompleted(value),
         updateTask: (id, edits) => storage.updateTask(id, edits),
         deleteTask: (id) => storage.deleteTask(id),
+        readLists: () => storage.readLists(),
+        taskChanges: new EventTarget(),
+        reorderTask: (id, targetId, position, hide) =>
+          storage.reorderTask(id, targetId, position, hide),
       },
     );
     const navigation = document.createElement("nav");
