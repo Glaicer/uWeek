@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: ["next-*.spec.ts"],
+  testMatch: ["next-board*.spec.ts"],
   testIgnore: ["next-launch*.spec.ts", "next-csv*.spec.ts"],
   use: { baseURL: "http://127.0.0.1:4211", timezoneId: "Europe/Moscow" },
   webServer: {
