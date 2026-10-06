@@ -2,5 +2,8 @@
 /.scratch/
 /node_modules/
 /dist/
+/.next/
+*.tsbuildinfo
 /test-results/
 /playwright-report/
+/next-env.d.ts

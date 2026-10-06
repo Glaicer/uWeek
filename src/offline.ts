@@ -1,5 +1,5 @@
 export async function startOfflineShell(): Promise<void> {
-  if (!import.meta.env.PROD) return;
+  if (!import.meta.env?.PROD) return;
   const status = document.createElement("p");
   status.setAttribute("aria-live", "polite");
   status.dataset.offlineStatus = "";
@@ -11,7 +11,7 @@ export async function startOfflineShell(): Promise<void> {
   status.textContent = "Подготовка к работе офлайн…";
   try {
     const registration = await navigator.serviceWorker.register(
-      `${import.meta.env.BASE_URL}sw.js`,
+      `${import.meta.env?.BASE_URL ?? "/"}sw.js`,
       { updateViaCache: "none" },
     );
     const watchUpdate = () => {
