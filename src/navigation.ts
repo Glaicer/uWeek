@@ -18,7 +18,10 @@ export async function startNavigation(
   let selected = localDate(savedWeek ?? calendarDate(new Date()));
   if (!savedWeek) await storage.saveSelectedWeek(calendarDate(selected));
   let settings = await storage.readSettings();
+  let renderedDate = "";
   async function render(): Promise<void> {
+    const currentDate = calendarDate(new Date());
+    await storage.rollOverUnfinishedTasks(currentDate);
     const taskActions = {
       updateTask: (id: string, edits: Partial<import("./model").TaskEdits>) =>
         storage.updateTask(id, edits),
@@ -43,7 +46,7 @@ export async function startNavigation(
     renderBoard(
       root,
       days,
-      calendarDate(new Date()),
+      currentDate,
       tasks,
       lists,
       (title, date) => storage.createTask(title, date),
@@ -59,6 +62,7 @@ export async function startNavigation(
         ...taskActions,
       },
     );
+    renderedDate = currentDate;
     const navigation = document.createElement("nav");
     navigation.setAttribute("aria-label", "Навигация по неделям");
     for (const [label, offset] of [
@@ -177,4 +181,28 @@ export async function startNavigation(
     }
   }
   await render();
+  let refreshing = false;
+  const refreshDay = async () => {
+    if (
+      refreshing ||
+      document.hidden ||
+      renderedDate === calendarDate(new Date()) ||
+      document.querySelector("dialog[open]") ||
+      (root.contains(document.activeElement) &&
+        document.activeElement?.matches("input:focus, textarea:focus"))
+    )
+      return;
+    refreshing = true;
+    try {
+      await render();
+    } catch {
+      root.querySelector('[role="status"]')!.textContent =
+        "Задачи не перенесены. Проверьте доступ к хранилищу и повторите попытку.";
+    } finally {
+      refreshing = false;
+    }
+  };
+  window.setInterval(() => void refreshDay(), 60_000);
+  window.addEventListener("focus", () => void refreshDay());
+  document.addEventListener("visibilitychange", () => void refreshDay());
 }

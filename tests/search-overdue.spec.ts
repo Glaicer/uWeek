@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("overdue uses local today, excludes today/completed/lists and refreshes after a manual date change", async ({
+test("rollover removes unfinished past tasks from overdue search and preserves completed/list/future placements", async ({
   page,
 }) => {
   await page.clock.setFixedTime(new Date("2026-10-06T00:30:00+03:00"));
@@ -20,24 +20,37 @@ test("overdue uses local today, excludes today/completed/lists and refreshes aft
   await page.getByRole("button", { name: "Поиск", exact: true }).click();
   const search = page.getByRole("dialog", { name: "Поиск задач" });
   await search.getByLabel("Просроченные", { exact: true }).check();
-  await expect(search.getByRole("listitem")).toHaveCount(2);
-  await expect(search.getByRole("listitem").first()).toContainText("Давно");
-  await search.getByLabel("Поиск по тексту", { exact: true }).fill("маркер");
-  await expect(search.getByRole("listitem")).toHaveCount(1);
-  await search
-    .getByRole("button", { name: "Вчера маркер", exact: true })
-    .click();
-  const editor = page.getByRole("dialog", { name: "Редактор задачи" });
-  await editor.getByLabel("Дата задачи", { exact: true }).fill("2026-10-06");
-  await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(editor).toHaveCount(0);
-  await expect(
-    search.getByLabel("Поиск по тексту", { exact: true }),
-  ).toHaveValue("маркер");
   await expect(search).toContainText("Ничего не найдено");
+  await search.getByLabel("Поиск по тексту", { exact: true }).fill("маркер");
   await search.getByLabel("Просроченные", { exact: true }).uncheck();
   await expect(search.getByRole("listitem")).toHaveCount(5);
   await expect(
     search.getByRole("listitem").filter({ hasText: "Вчера маркер" }),
   ).toContainText("2026-10-06");
+  await expect(
+    search.getByRole("listitem").filter({ hasText: "Завтра маркер" }),
+  ).toContainText("2026-10-07");
+  await expect(
+    search.getByRole("listitem").filter({ hasText: "Завершено маркер" }),
+  ).toContainText("2026-10-04");
+  await expect(
+    search.getByRole("listitem").filter({ hasText: "Без даты маркер" }),
+  ).toContainText("Идеи");
+  await search
+    .getByRole("button", { name: "Вчера маркер", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Редактор задачи" });
+  await editor.getByLabel("Дата задачи", { exact: true }).fill("2026-10-07");
+  await editor.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(
+    search.getByLabel("Поиск по тексту", { exact: true }),
+  ).toHaveValue("маркер");
+  await search.getByLabel("Просроченные", { exact: true }).check();
+  await expect(search).toContainText("Ничего не найдено");
+  await search.getByLabel("Просроченные", { exact: true }).uncheck();
+  await expect(search.getByRole("listitem")).toHaveCount(5);
+  await expect(
+    search.getByRole("listitem").filter({ hasText: "Вчера маркер" }),
+  ).toContainText("2026-10-07");
 });

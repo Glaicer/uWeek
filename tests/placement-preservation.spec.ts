@@ -60,7 +60,7 @@ test("new placement appends after maximum including hidden tasks and preserves e
             tasks.put({
               id: "day-tail",
               title: "Дневной хвост",
-              completed: false,
+              completed: true,
               placement: { date: "1999-12-31" },
               order: 700,
             });
