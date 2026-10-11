@@ -19,6 +19,7 @@ import type {
 import { inWeek, mergeTasks, tasksForDate } from "../src/planning";
 import { PlannerStorage } from "../src/storage";
 import { DataSection } from "./data-section";
+import { startDayRefresh } from "./day-refresh";
 import { DaySection } from "./day-section";
 import { Search } from "./search";
 import { SomedaySection } from "./someday-section";
@@ -53,6 +54,7 @@ export function Planner() {
   const listsRef = useRef<SomedayList[]>([]);
   const listTasksRef = useRef<Task[]>([]);
   const generationRef = useRef(0);
+  const renderedDateRef = useRef("");
   const mainRef = useRef<HTMLElement>(null);
   const statusRef = useRef<HTMLParagraphElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -250,6 +252,16 @@ export function Planner() {
     await refreshTo(current, weekStartRef.current);
   }, [refreshTo]);
 
+  const rollOverAndRefreshBoard = useCallback(async () => {
+    const opened = storageRef.current;
+    const current = selectedRef.current;
+    if (!opened || !current) return;
+    const currentDate = calendarDate(new Date());
+    await opened.rollOverUnfinishedTasks(currentDate);
+    const applied = await refreshTo(current, weekStartRef.current);
+    if (applied) renderedDateRef.current = currentDate;
+  }, [refreshTo]);
+
   const requestFilterFocus = useCallback(() => {
     filterRef.current?.focus();
   }, []);
@@ -343,6 +355,8 @@ export function Planner() {
       try {
         const opened = await PlannerStorage.open();
         if (stale) return;
+        await opened.rollOverUnfinishedTasks(calendarDate(new Date()));
+        if (stale) return;
         const savedWeek = await opened.readSelectedWeek();
         if (stale) return;
         const initial = localDate(savedWeek ?? calendarDate(new Date()));
@@ -372,6 +386,7 @@ export function Planner() {
         setListTasks(nextListTasks);
         setHideCompleted(nextHide);
         setPhase("ready");
+        renderedDateRef.current = calendarDate(new Date());
       } catch {
         if (stale) return;
         setPhase("error");
@@ -381,6 +396,16 @@ export function Planner() {
       stale = true;
     };
   }, [attempt]);
+
+  useEffect(() => {
+    if (phase !== "ready" || !mainRef.current) return;
+    return startDayRefresh({
+      container: mainRef.current,
+      getRenderedDate: () => renderedDateRef.current,
+      refresh: rollOverAndRefreshBoard,
+      onError: showStatus,
+    });
+  }, [phase, rollOverAndRefreshBoard, showStatus]);
 
   useEffect(() => {
     if (filterRef.current) filterRef.current.checked = hideCompleted;

@@ -22,6 +22,7 @@
     "test:next-placement": "playwright test --config playwright.next-placement.config.ts",
     "test:next-search": "playwright test --config playwright.next-search.config.ts",
     "test:next-acceptance": "playwright test --config playwright.next-acceptance.config.ts",
+    "test:next-rollover": "playwright test --config playwright.next-rollover.config.ts",
     "lint": "eslint .",
     "format:check": "prettier --check src app tests scripts *.json *.ts *.mjs README.md",
     "test:browser": "playwright test"

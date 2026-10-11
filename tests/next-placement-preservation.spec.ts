@@ -64,7 +64,9 @@ test("new placement appends after maximum including hidden tasks and preserves e
             tasks.put({
               id: "day-tail",
               title: "Дневной хвост",
-              completed: false,
+              // Выполненная, чтобы авто-перенос незавершённых прошлых задач
+              // на сегодня (ticket 11) не двигал якорь порядка 1999-12-31.
+              completed: true,
               placement: { date: "1999-12-31" },
               order: 700,
             });

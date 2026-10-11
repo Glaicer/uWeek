@@ -56,7 +56,9 @@ const fixture: BackupV1 = {
     {
       id: "task-c",
       title: "Past",
-      completed: false,
+      // Выполненная, чтобы авто-перенос (ticket 11) не двигал прошлую дату
+      // при перезагрузке — иначе сравнение копий после reopen ломалось бы.
+      completed: true,
       placement: { date: "2000-01-01" },
       order: 0,
     },

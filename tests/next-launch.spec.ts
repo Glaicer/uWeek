@@ -40,6 +40,9 @@ test("создание задачи в Next.js сохраняется после
       timezoneId: "Europe/Moscow",
     });
     page = context.pages()[0];
+    // Тот же фиксированный «сегодня»: иначе авто-перенос (ticket 11) утащил
+    // бы задачу 2026-10-05 на реальную дату переоткрытия.
+    await page.clock.setFixedTime(new Date("2026-10-05T12:00:00+03:00"));
     await page.goto(url);
     await expect(
       page

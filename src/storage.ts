@@ -315,6 +315,40 @@ export class PlannerStorage {
     await done;
   }
 
+  async rollOverUnfinishedTasks(today: string): Promise<void> {
+    const transaction = this.database.transaction("tasks", "readwrite");
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore("tasks");
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const tasks: Task[] = request.result;
+      let order =
+        Math.max(
+          -1,
+          ...tasks
+            .filter((task) => task.placement.date === today)
+            .map((task) => task.order),
+        ) + 1;
+      const unfinished = tasks
+        .filter(
+          (task) =>
+            !task.completed &&
+            task.placement.date !== undefined &&
+            task.placement.date < today,
+        )
+        .sort(
+          (a, b) =>
+            a.placement.date!.localeCompare(b.placement.date!) ||
+            a.order - b.order ||
+            a.id.localeCompare(b.id),
+        );
+      for (const task of unfinished) {
+        store.put({ ...task, placement: { date: today }, order: order++ });
+      }
+    };
+    await done;
+  }
+
   async readWeek(firstDate: string, lastDate: string): Promise<Task[]> {
     const transaction = this.database.transaction("tasks", "readonly");
     const done = transactionDone(transaction);
