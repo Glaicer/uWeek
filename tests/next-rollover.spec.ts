@@ -1,22 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { Task } from "../src/model";
 
-async function tasks(page: Page, seed?: Task[]): Promise<Task[]> {
-  return page.evaluate(async (seed) => {
+async function tasks(page: Page): Promise<Task[]> {
+  return page.evaluate(async () => {
     return new Promise<Task[]>((resolve, reject) => {
       const open = indexedDB.open("yourweek");
       open.onsuccess = () => {
         const database = open.result;
-        const transaction = database.transaction(
-          "tasks",
-          seed ? "readwrite" : "readonly",
-        );
-        const store = transaction.objectStore("tasks");
-        if (seed) {
-          store.clear();
-          for (const task of seed) store.put(task);
-        }
-        const request = store.getAll();
+        const transaction = database.transaction("tasks", "readonly");
+        const request = transaction.objectStore("tasks").getAll();
         transaction.oncomplete = () => {
           database.close();
           resolve(request.result);
@@ -25,28 +17,18 @@ async function tasks(page: Page, seed?: Task[]): Promise<Task[]> {
       };
       open.onerror = () => reject(open.error);
     });
-  }, seed);
+  });
 }
 
 test("reopening catches up missed days, appends in date/order order and preserves task data", async ({
   page,
 }) => {
   await page.clock.setFixedTime(new Date("2027-01-01T00:30:00+03:00"));
+  await page.route("**/*", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<html></html>" }),
+  );
   await page.goto("/");
-  const listId = await page.evaluate(async () => {
-    return new Promise<string>((resolve) => {
-      const open = indexedDB.open("yourweek");
-      open.onsuccess = () => {
-        const database = open.result;
-        const transaction = database.transaction("lists", "readonly");
-        const request = transaction.objectStore("lists").getAll();
-        transaction.oncomplete = () => {
-          database.close();
-          resolve(request.result[0].id);
-        };
-      };
-    });
-  });
+  const listId = "seeded-list";
   const original: Task[] = [
     {
       id: "old",
@@ -113,7 +95,31 @@ test("reopening catches up missed days, appends in date/order order and preserve
       order: 0,
     },
   ];
-  await tasks(page, original);
+  await page.evaluate(
+    async ({ listId, original }: { listId: string; original: Task[] }) => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("yourweek", 1);
+        request.onupgradeneeded = () => {
+          const tasks = request.result.createObjectStore("tasks", {
+            keyPath: "id",
+          });
+          tasks.createIndex("date", "placement.date");
+          const lists = request.result.createObjectStore("lists", {
+            keyPath: "id",
+          });
+          lists.add({ id: listId, title: "Мой список", order: 0 });
+          for (const task of original) tasks.add(task);
+        };
+        request.onsuccess = () => {
+          request.result.close();
+          resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
+    },
+    { listId, original },
+  );
+  await page.unroute("**/*");
   await page.reload();
   await expect(
     page.locator('.day[data-date="2027-01-01"] .task-title'),
