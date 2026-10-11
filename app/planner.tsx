@@ -101,7 +101,9 @@ export function Planner() {
       const opened = storageRef.current;
       if (!opened) return false;
       const generation = ++generationRef.current;
+      const currentDate = calendarDate(new Date());
       try {
+        await opened.rollOverUnfinishedTasks(currentDate);
         const days = currentWeek(date, weekStartsOn);
         const [tasks, nextLists, nextHide, nextListTasks] = await Promise.all([
           opened.readWeek(calendarDate(days[0]), calendarDate(days[6])),
@@ -120,6 +122,7 @@ export function Planner() {
           setHideCompleted(nextHide);
           putListTasks(nextListTasks);
         });
+        renderedDateRef.current = currentDate;
         return true;
       } catch (error) {
         if (generationRef.current !== generation) return false;
@@ -253,13 +256,9 @@ export function Planner() {
   }, [refreshTo]);
 
   const rollOverAndRefreshBoard = useCallback(async () => {
-    const opened = storageRef.current;
     const current = selectedRef.current;
-    if (!opened || !current) return;
-    const currentDate = calendarDate(new Date());
-    await opened.rollOverUnfinishedTasks(currentDate);
-    const applied = await refreshTo(current, weekStartRef.current);
-    if (applied) renderedDateRef.current = currentDate;
+    if (!current) return;
+    await refreshTo(current, weekStartRef.current);
   }, [refreshTo]);
 
   const requestFilterFocus = useCallback(() => {

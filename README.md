@@ -69,6 +69,7 @@ pnpm test:next-backup          # копии + совместимость со с
 pnpm test:next-csv             # CSV-контракт (4222)
 pnpm test:next-csv-storage     # real-storage seam на next dev (4225)
 pnpm test:next-placement       # размещение, порядок, drag (4223)
+pnpm test:next-rollover        # авто-перенос незавершённых задач на сегодня (4227)
 pnpm test:next-search          # поиск и просроченные (4224)
 pnpm test:offline              # офлайн-оболочка и переход со старой версии (4204)
 pnpm test:next-acceptance      # полная приёмка, chromium+firefox (4226)
@@ -78,7 +79,7 @@ pnpm test:next-acceptance      # полная приёмка, chromium+firefox (
 
 ## Границы модулей
 
-- `app/` — декларативный React-интерфейс: `planner.tsx` (композиция: загрузка/ошибка/повтор, неделя, настройки, фильтр), `day-section.tsx`, `someday-section.tsx`, `task-container.tsx`, `task-editor.tsx`, `search.tsx`, `data-section.tsx`, `csv-import.tsx`, `week-navigation.tsx`, `drag.ts`.
+- `app/` — декларативный React-интерфейс: `planner.tsx` (композиция: загрузка/ошибка/повтор, неделя, настройки, фильтр), `day-section.tsx`, `someday-section.tsx`, `task-container.tsx`, `task-editor.tsx`, `search.tsx`, `data-section.tsx`, `csv-import.tsx`, `week-navigation.tsx`, `day-refresh.ts` (обновление доски на смену календарного дня: интервал, `focus`, `visibilitychange`), `drag.ts`.
 - `src/model.ts` — задачи, списки и взаимоисключающее размещение по дате или списку.
 - `src/storage.ts` — IndexedDB со схемой v3, атомарные операции задач, списков, импорта и восстановления. Успех только после завершения транзакции; обновление схемы сохраняет данные.
 - `src/calendar.ts` — локальные календарные даты без UTC и расчёт недели.
