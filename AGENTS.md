@@ -12,6 +12,10 @@ Use the five default triage roles as status strings. See `docs/agents/triage-lab
 
 Single-context: root `GLOSSARY.md` and `docs/adr/`. Before exploring domain concepts or decisions, read `docs/agents/domain.md`.
 
+### Default tech stack
+
+Before choosing a library or tool for a task, read `docs/tech-stack.md`: accepted defaults (zustand 5.0.15, zod 4.6.5), the explicit "not adopted" list with reasons, and the rules for adding any new dependency (resolve the current stable from the registry, pin the exact version, respect the spec's "no dependency unless used now" constraint). New dependencies are installed only with the owner's approval.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
