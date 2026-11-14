@@ -1,6 +1,6 @@
 # Технологический стек по умолчанию
 
-Дата проверки: 2026-10-11. Версии сверены по npm registry (`npm view <пакет> version`), не по памяти. Планировщик пакетов — pnpm 12.3.4, Node.js 24.17.0; в `package.json` версии закреплены точно (без `^`/`~`).
+Дата проверки: 2026-10-11; стек `yourweek-cloud` — 2026-11-14. Версии сверены по npm registry (`npm view <пакет> version`), не по памяти. Планировщик пакетов — pnpm 12.3.4, Node.js 24.17.0; в `package.json` версии закреплены точно (без `^`/`~`).
 
 Этот файл — договорённость о «чем мы решаем типовые задачи», чтобы каждая новая функция не заново выбирала инструмент. Спека продукта выше этого списка: `nextjs-migration` запрещает серверное хранение задач, аналитику и telemetry с пользовательскими данными, внешние шрифты и CDN, редизайн и новый формат копии.
 
@@ -18,9 +18,28 @@
 | Тесты | Playwright (браузерный seam) | 1.63.0 | Согласованный основной seam: настоящие IndexedDB и service worker, production-runtime. |
 | Сборка/оболочка | Next.js + `scripts/build-next.mjs` + `scripts/sw.js` | 16.3.8 | Требование оболочки: HTML входа и все ленивые чанки одной сборки должны попадать в `public/sw.js`. |
 
+### Стек `yourweek-cloud`
+
+Утверждён владельцем 2026-11-14 (тикет `.scratch/yourweek-cloud/issues/01-stack-decision.md`). Каждый пакет ставится по правилу 6 — в тикете из столбца «Когда». Запрет серверного хранения и telemetry в преамбуле и в «Явно не берем» снимает тикет 02 спеки `yourweek-cloud`. Размер — число пакетов в дереве установки без необязательных peer, включая сам пакет.
+
+Совместимость: ни один пакет не объявляет peer на TypeScript; `engines` у всех допускают Node 24.17 (самый строгий — zod-openapi `>=22.14.0`, vitest `^22.12 || ^24 || >=26`). Peer на Next.js и React есть только у better-auth: `next ^14 || ^15 || ^16`, `react ^18 || ^19`.
+
+| Задача | Решение | Версия | Когда | Почему именно так | Источник |
+| --- | --- | --- | --- | --- | --- |
+| Доступ к Postgres | **drizzle-orm** | 0.45.4 | 02 | Apache-2.0. Схема — обычный TS-файл, типы видны `tsc` без шага генерации; адаптер better-auth из коробки. 15 пакетов вместе с pg. Риск: 1.0 в rc, мажорный апгрейд ожидаем; peer better-auth уже допускает его (`^0.45.2 \|\| >=1.0.0-rc.1 <2.0.0`). | Context7 `/drizzle-team/drizzle-orm/0.45.4` |
+| Драйвер Postgres | **pg** + `@types/pg` (dev) | 8.23.1 / 8.23.1 | 02 | MIT. Peer better-auth и drizzle; `@types/pg` — 11 пакетов. | Context7 `/drizzle-team/drizzle-orm/0.45.4` (node-postgres) |
+| Миграции | **drizzle-kit** (dev) | 0.31.11 | 02 | MIT. SQL-миграции генерируются из схемы, применяются `migrate()` из `drizzle-orm/node-postgres/migrator`. 88 пакетов (esbuild, tsx), только dev. | Context7 `/drizzle-team/drizzle-orm/0.45.4` (drizzle-kit README) |
+| Аутентификация | **better-auth** | 1.7.23 | 02 (почта), 13 (Google) | MIT. Magic link, Google, сессии в Postgres через drizzle-адаптер и handler для App Router — всё штатно. 36 пакетов вместе с drizzle и pg. Telemetry выключена по умолчанию, но пакет `@better-auth/telemetry` ставится как прямая зависимость — не включать. | Context7 `/better-auth/better-auth/v1.7.15` (ближайшая версия в Context7) |
+| Отправка почты | **resend** | 6.38.1 | 02 | MIT; выбор спеки. 5 пакетов. | npm registry; спека `yourweek-cloud` |
+| MCP-сервер по HTTP | **@modelcontextprotocol/server** | 2.4.0 | 12 | Apache-2.0, 3 пакета. `createMcpHandler` — web-standard `fetch`-handler: встаёт в route handler Next.js без Node-адаптера, Bearer передаётся как `authInfo`. Host/Origin сам не проверяет. | Context7 `/modelcontextprotocol/typescript-sdk/v2.4.0` |
+| MCP-клиент для тестов | **@modelcontextprotocol/client** (dev) | 2.4.0 | 12 | Apache-2.0, 13 пакетов. Проверяет сервер в процессе и против запущенного сервера. | Context7 `/modelcontextprotocol/typescript-sdk/v2.4.0` (docs/testing) |
+| OpenAPI из zod | **zod-openapi** | 6.0.2 | 11 | MIT, без зависимостей, peer `zod ^4`. OpenAPI 3.1 из тех же схем через `.meta()` zod 4. | Context7 `/samchungy/zod-openapi` (README master) |
+| Лимит частоты запросов | **rate-limiter-flexible** | 11.4.1 | 11 | ISC, без зависимостей. Лимит в памяти на токен хватает для одного контейнера; при нескольких — хранилище Postgres на том же pg Pool без смены API. | Context7 `/animir/node-rate-limiter-flexible` (README master) |
+| Unit-тесты | **vitest** + **vite** (dev) | 5.1.0 / 8.3.8 | 04 | MIT. Только чистые правила (календарь и часовые пояса, серии, перенос, CSV). Понимает импорты без расширений и текущий `tsconfig`; 67 пакетов с vite. Playwright остаётся seam сценариев пользователя. | npm registry (peer `vite ^6.4 \|\| ^7 \|\| ^8`) |
+
 ## Явно не берем
 
-| Кандидат (версия на 2026-10-11) | Почему нет |
+| Кандидат (версия на 2026-10-11; строки `yourweek-cloud` — на 2026-11-14) | Почему нет |
 | --- | --- |
 | react-hook-form 7.89.0 + @hookform/resolvers 5.9.1 | В приложении три маленькие формы (быстрый ввод, переименование списка, черновик редактора), они уже управляемые в React. RHF добавил бы вторую модель мышления. Вернуться, если форм станет много и появится асинхронная валидация по полям. |
 | date-fns 4.4.0 | См. `src/calendar.ts`: UTC-библиотека ломает календарные даты. |
@@ -30,10 +49,17 @@
 | nanoid 6.0.2 | Есть `crypto.randomUUID()`. |
 | dnd-kit 0.0.2 | Нативный Drag API уже реализован и покрыт. |
 | tailwindcss 4.3.3 | Редизайн вне работы. |
-| vitest 5.0.3 | Браузерный seam — согласованный основной тестовый контракт. Unit-раннер допустим только для чистых правил в `src/` и только с согласия владельца, если браузерные наборы станут узким местом. |
 | valibot 1.5.0, arktype 2.2.8 | Альтернативы zod; выбран zod. |
 | Redux Toolkit, jotai, mobx, recoil | Альтернативы zustand; выбран zustand. |
 | Любые шрифты, аналитика, telemetry, sentry, posthog | Спека: пользовательские данные не покидают устройство. |
+| prisma 7.10.1 / 8.0.0-rc.33 (Apache-2.0) | Тег `latest` указывает на rc 8, стабильная 7 — на `prev`; 8 не входит в peer better-auth (`^5 \|\| ^6 \|\| ^7`). 133 пакета, отдельный DSL и шаг `prisma generate`, telemetry CLI включена по умолчанию. |
+| kysely 0.29.9 (MIT) | 15 пакетов с pg, но миграции и типы БД пишутся вручную; выбран drizzle. |
+| postgres 4.1.1 (Unlicense), node-pg-migrate 9.0.0 (MIT) | Драйвер — pg (peer better-auth и drizzle); миграции — drizzle-kit (node-pg-migrate — 36 пакетов с pg). |
+| next-auth 5.0.0-beta.32 (ISC), lucia 3.2.2 (MIT), arctic 3.7.0 (MIT) | next-auth 5 только beta; lucia и arctic помечены deprecated. |
+| @modelcontextprotocol/sdk 1.32.2 (MIT), mcp-handler 2.4.0 (Apache-2.0) | SDK v1 — 95 пакетов (express, hono); v2 `@modelcontextprotocol/server` делает то же без адаптеров. mcp-handler — лишняя прослойка над v2 с peer на OpenTelemetry. |
+| @asteasolutions/zod-to-openapi 9.1.0 (MIT) | 3 пакета, отдельный реестр и `openapi3-ts`; zod-openapi работает поверх `.meta()` zod 4 без зависимостей. |
+| @upstash/ratelimit 2.2.1 (MIT) | Требует Redis, которого в развёртывании нет. |
+| `node:test` | Type stripping в Node 24 требует `.ts` в импортах — пришлось бы переписать импорты `src/` и `tsconfig`. |
 
 ## Правила добавления новой зависимости
 
