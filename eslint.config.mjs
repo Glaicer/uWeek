@@ -6,7 +6,12 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default defineConfig(
   {
-    ignores: ["dist/**", ".next/**", "test-results/**", "playwright-report/**"],
+    ignores: [
+      ".next/**",
+      ".next-e2e/**",
+      "test-results/**",
+      "playwright-report/**",
+    ],
   },
   {
     files: ["**/*.{ts,tsx,mjs}"],

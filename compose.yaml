@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:18.7-alpine
+    environment:
+      POSTGRES_USER: yourweek
+      POSTGRES_PASSWORD: yourweek
+      POSTGRES_DB: yourweek
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "yourweek"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  postgres:

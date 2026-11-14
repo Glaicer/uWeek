@@ -1,23 +1,25 @@
 import { defineConfig } from "@playwright/test";
+import { outbox } from "./tests/mail";
+
+const port = 4172;
+const env = {
+  NEXT_TELEMETRY_DISABLED: "1",
+  NEXT_DIST_DIR: ".next-e2e",
+  DATABASE_URL: "postgres://yourweek:yourweek@127.0.0.1:5433/yourweek_test",
+  BETTER_AUTH_SECRET: "playwright-only-secret-not-for-production-use",
+  BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
+  MAIL_FROM: "YourWeek <login@example.com>",
+  MAIL_OUTBOX_DIR: outbox,
+};
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: [
-    "next-board*.spec.ts",
-    "next-navigation*.spec.ts",
-    "next-layout*.spec.ts",
-    "next-first-task.spec.ts",
-    "next-launch.spec.ts",
-    "next-review-domain.spec.ts",
-    "next-review-fixes.spec.ts",
-  ],
-  use: { baseURL: "http://127.0.0.1:4171", timezoneId: "Europe/Moscow" },
+  use: { baseURL: env.BETTER_AUTH_URL, timezoneId: "Europe/Moscow" },
   webServer: {
-    command:
-      "pnpm build && pnpm exec next start --hostname 127.0.0.1 --port 4171",
-    url: "http://127.0.0.1:4171",
+    command: `node src/db/migrate.ts && next dev --hostname 127.0.0.1 --port ${port}`,
+    url: env.BETTER_AUTH_URL,
     reuseExistingServer: false,
-    env: { NEXT_TELEMETRY_DISABLED: "1" },
+    env,
     timeout: 180_000,
   },
 });

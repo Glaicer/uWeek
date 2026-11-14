@@ -47,3 +47,16 @@ export function formatDate(date: Date): string {
     .format(date)
     .replace(" г.", "");
 }
+
+export function isoWeek(date: Date): number {
+  const thursday = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 3 - ((date.getDay() + 6) % 7),
+  );
+  const dayOfYear =
+    (Date.UTC(thursday.getFullYear(), thursday.getMonth(), thursday.getDate()) -
+      Date.UTC(thursday.getFullYear(), 0, 1)) /
+    86_400_000;
+  return Math.floor(dayOfYear / 7) + 1;
+}

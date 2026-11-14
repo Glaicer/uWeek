@@ -1,0 +1,65 @@
+.page {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 96px 24px;
+}
+
+.title {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  margin: 8px 0 32px;
+  color: var(--secondary);
+}
+
+.form {
+  display: grid;
+}
+
+.label {
+  color: var(--secondary);
+  font-size: 14px;
+}
+
+.input {
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 2px solid var(--text);
+  font: inherit;
+  font-size: 18px;
+  outline: none;
+}
+
+.input:focus {
+  border-bottom-color: var(--accent);
+}
+
+.submit {
+  justify-self: start;
+  margin-top: 24px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--background);
+  font: inherit;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.5;
+}
+
+.sent {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--accent);
+}

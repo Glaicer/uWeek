@@ -27,3 +27,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+### Tests
+
+`pnpm test:e2e` needs `docker compose up -d` (database `yourweek_test`). Playwright starts its own `next dev` with `NEXT_DIST_DIR=.next-e2e` so it can run beside the owner's `pnpm dev` (Next allows one dev server per dist dir); keep the `.next-e2e` entries in `tsconfig.json`, or every test run rewrites the file. Sign-in emails land in `test-results/outbox` via `MAIL_OUTBOX_DIR`.

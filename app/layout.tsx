@@ -1,20 +1,12 @@
-import type { Metadata, Viewport } from "next";
-import "../src/styles.css";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "YourWeek — недельный планер",
-};
+export const metadata: Metadata = { title: "YourWeek" };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

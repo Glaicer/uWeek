@@ -7,7 +7,6 @@
 /test-results/
 /playwright-report/
 /next-env.d.ts
-/public/sw.js
-/public/index.html
-/public/LICENSE
-/public/THIRD_PARTY_NOTICES.md
+/.next-e2e/
+/.outbox/
+.env

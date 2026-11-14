@@ -1,0 +1,179 @@
+.page {
+  padding: 32px 22px 64px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 72px;
+}
+
+.title {
+  margin: 0;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.weekNumber {
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.round {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f2f2f2;
+  color: var(--text);
+  cursor: pointer;
+  anchor-name: --menu-button;
+}
+
+.round svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.round:focus-visible,
+.menuItem:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.menu {
+  position-anchor: --menu-button;
+  inset: auto;
+  top: anchor(bottom);
+  right: anchor(right);
+  margin: 8px 0 0;
+  min-width: 220px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--background);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.12);
+}
+
+.account {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.menuItem {
+  width: 100%;
+  padding: 8px 16px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: #f5f5f5;
+}
+
+.week {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.weekend {
+  display: grid;
+  align-content: start;
+  row-gap: var(--row);
+}
+
+.dayHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: var(--row);
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--text);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.weekday {
+  color: var(--secondary);
+  font-weight: 400;
+}
+
+.dayHeading[aria-current="date"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.dayHeading[aria-current="date"] .weekday {
+  color: var(--accent);
+}
+
+.row {
+  height: var(--row);
+  border-bottom: 1px solid var(--rule);
+}
+
+@media (max-width: 1199px) {
+  .week {
+    grid-template-columns: repeat(6, 300px);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 -22px;
+    padding: 0 22px;
+    scroll-padding: 0 22px;
+  }
+
+  .day,
+  .weekend {
+    scroll-snap-align: start;
+  }
+
+  .weekend .day {
+    scroll-snap-align: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .page {
+    padding: 20px 16px 48px;
+  }
+
+  .header {
+    margin-bottom: 40px;
+  }
+
+  .title {
+    font-size: 26px;
+  }
+
+  .week {
+    grid-template-columns: repeat(6, calc(100vw - 32px));
+    gap: 16px;
+    margin: 0 -16px;
+    padding: 0 16px;
+    scroll-padding: 0 16px;
+  }
+}
