@@ -33,6 +33,7 @@ export default async function WeekPage({
       key={`${view.dates[0]} ${view.today}`}
       today={view.today}
       dates={view.dates}
+      weekStartsOn={view.weekStartsOn}
       tasks={view.tasks}
       menu={
         <>

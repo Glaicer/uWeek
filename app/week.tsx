@@ -1,16 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   startTransition,
   useEffect,
+  useEffectEvent,
   useId,
   useOptimistic,
+  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
-import { addDays, localDate, weekNumber } from "../src/calendar";
+import {
+  addDays,
+  localDate,
+  monthWeeks,
+  weekNumber,
+  type WeekStart,
+} from "../src/calendar";
 import type { DayTask, TaskEdits } from "../src/planner";
 import { createTask, deleteTask, saveTimeZone, updateTask } from "./actions";
 import styles from "./week.module.css";
@@ -21,6 +31,27 @@ const dateRange = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
+const monthName = new Intl.DateTimeFormat("en-GB", { month: "long" });
+const dayMonth = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "long",
+});
+const pickerYears = 10;
+const shortcutHints: Record<string, string> = {
+  ArrowLeft: "←",
+  ArrowRight: "→",
+};
+
+function weekRange(week: string[]): string {
+  const first = localDate(week[0]);
+  const last = localDate(week[6]);
+  // why: formatRange spaces the dash differently in Node and browser ICU, which breaks hydration
+  if (first.getMonth() === last.getMonth())
+    return `${first.getDate()}–${dateRange.format(last)}`;
+  if (first.getFullYear() === last.getFullYear())
+    return `${dayMonth.format(first)} – ${dateRange.format(last)}`;
+  return `${dateRange.format(first)} – ${dateRange.format(last)}`;
+}
 const minRows = 5;
 const saveFailed = "Couldn't save. Try again.";
 
@@ -215,6 +246,21 @@ function EditIcon() {
   );
 }
 
+function CalendarIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M19 4h-2V2h-2v2H9V2H7v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2M5 20V8h14V6v14z"
+      />
+      <path
+        fill="currentColor"
+        d="M7 11h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zm-8 4h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z"
+      />
+    </svg>
+  );
+}
+
 function TaskRow({
   task,
   onChanged,
@@ -316,17 +362,344 @@ function Tool({
 function WeekLink({
   label,
   href,
+  shortcut,
+  pressed,
   children,
 }: {
   label?: string;
   href: string;
+  shortcut: string;
+  pressed: boolean;
   children: ReactNode;
 }) {
   return (
-    <Link className={styles.tool} aria-label={label} href={href}>
+    <Link
+      className={styles.tool}
+      aria-label={label}
+      href={href}
+      aria-keyshortcuts={shortcut}
+      title={`${label ?? children} (${shortcutHints[shortcut] ?? shortcut})`}
+      data-pressed={pressed || undefined}
+    >
       {children}
     </Link>
   );
+}
+
+function ChevronIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M16.293 9.293L12 13.586L7.707 9.293l-1.414 1.414L12 16.414l5.707-5.707z"
+      />
+    </svg>
+  );
+}
+
+function focusSelected(list: HTMLElement) {
+  const selected = list.querySelector<HTMLElement>('[aria-selected="true"]');
+  if (!selected) return;
+  selected.focus({ preventScroll: true });
+  list.scrollTop =
+    selected.offsetTop - (list.clientHeight - selected.offsetHeight) / 2;
+}
+
+function Dropdown({
+  label,
+  shortcut,
+  value,
+  options,
+  list,
+  onChange,
+}: {
+  label: string;
+  shortcut: string;
+  value: number;
+  options: { value: number; label: string }[];
+  list: RefObject<HTMLDivElement | null>;
+  onChange: (value: number) => void;
+}) {
+  const id = useId();
+  const anchor = `--dropdown${id}`;
+  const button = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+
+  function choose(next: number) {
+    list.current?.hidePopover();
+    button.current?.focus();
+    onChange(next);
+  }
+
+  function onKeyDown(event: KeyboardEvent) {
+    const items = Array.from(
+      list.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [],
+    );
+    const index = items.findIndex((item) => item === document.activeElement);
+    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    if (step) {
+      event.preventDefault();
+      items[Math.min(Math.max(index + step, 0), items.length - 1)].focus();
+    }
+    if ((event.key === "Enter" || event.key === " ") && index >= 0) {
+      event.preventDefault();
+      choose(options[index].value);
+    }
+  }
+
+  return (
+    <>
+      <button
+        ref={button}
+        className={styles.dropdown}
+        style={{ anchorName: anchor }}
+        type="button"
+        role="combobox"
+        aria-label={label}
+        aria-keyshortcuts={shortcut}
+        title={`${label} (${shortcut})`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={id}
+        popoverTarget={id}
+      >
+        {options.find((option) => option.value === value)?.label}
+        <ChevronIcon />
+      </button>
+      <div
+        ref={list}
+        className={styles.options}
+        style={{ positionAnchor: anchor }}
+        id={id}
+        popover="auto"
+        role="listbox"
+        aria-label={label}
+        onKeyDown={onKeyDown}
+        onToggle={(event) => {
+          setOpen(event.newState === "open");
+          // why: a list opened by its letter has no invoker to hand focus back to on Escape
+          if (
+            event.newState === "closed" &&
+            document.activeElement === document.body
+          )
+            button.current?.focus();
+          if (
+            event.newState === "open" &&
+            !event.currentTarget.contains(document.activeElement)
+          )
+            focusSelected(event.currentTarget);
+        }}
+      >
+        {options.map((option) => (
+          <div
+            key={option.value}
+            className={styles.option}
+            role="option"
+            tabIndex={-1}
+            aria-selected={option.value === value}
+            onClick={() => choose(option.value)}
+          >
+            {option.label}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function GoTo({
+  today,
+  dates,
+  weekStartsOn,
+}: {
+  today: string;
+  dates: string[];
+  weekStartsOn: WeekStart;
+}) {
+  const popover = useRef<HTMLDivElement>(null);
+  const monthList = useRef<HTMLDivElement>(null);
+  const yearList = useRef<HTMLDivElement>(null);
+  const opening = useShortcut("KeyG", () => {
+    popover.current?.showPopover();
+    enterGrid();
+  });
+  const [year, setYear] = useState(Number(dates[3].slice(0, 4)));
+  const [month, setMonth] = useState(Number(dates[3].slice(5, 7)));
+  const thisYear = Number(today.slice(0, 4));
+  const firstYear = Math.min(year, thisYear - pickerYears);
+  const weeks = monthWeeks(year, month, weekStartsOn);
+  const inMonth = (day: string) => Number(day.slice(5, 7)) === month;
+
+  function weekRows(): HTMLElement[] {
+    return Array.from(popover.current?.querySelectorAll("a") ?? []);
+  }
+
+  function enterGrid() {
+    const rows = weekRows();
+    (rows.find((row) => row.ariaCurrent === "true") ?? rows[0])?.focus();
+  }
+
+  function onKeyDown(event: KeyboardEvent) {
+    if (
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    )
+      return;
+    const list = { KeyM: monthList, KeyY: yearList }[event.code]?.current;
+    if (list) {
+      event.preventDefault();
+      if (!list.matches(":popover-open")) list.showPopover();
+      focusSelected(list);
+      return;
+    }
+    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const rows = weekRows();
+    const index = rows.findIndex((row) => row === document.activeElement);
+    if (index < 0) enterGrid();
+    else rows[Math.min(Math.max(index + step, 0), rows.length - 1)].focus();
+  }
+
+  return (
+    <>
+      <button
+        className={`${styles.tool} ${styles.goToButton}`}
+        aria-label="Go to week"
+        aria-keyshortcuts="G"
+        title="Go to week (G)"
+        popoverTarget="go-to"
+        type="button"
+        data-pressed={opening || undefined}
+      >
+        <CalendarIcon />
+      </button>
+      <div
+        className={styles.picker}
+        id="go-to"
+        popover="auto"
+        ref={popover}
+        role="dialog"
+        aria-label="Go to week"
+        onKeyDown={onKeyDown}
+        onToggle={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            event.newState === "open" &&
+            !event.currentTarget.contains(document.activeElement)
+          )
+            enterGrid();
+        }}
+      >
+        <div className={styles.pickerHead}>
+          <Dropdown
+            label="Month"
+            shortcut="M"
+            list={monthList}
+            value={month}
+            options={Array.from({ length: 12 }, (_, index) => ({
+              value: index + 1,
+              label: monthName.format(new Date(2000, index, 1)),
+            }))}
+            onChange={setMonth}
+          />
+          <Dropdown
+            label="Year"
+            shortcut="Y"
+            list={yearList}
+            value={year}
+            options={Array.from(
+              {
+                length: Math.max(year, thisYear + pickerYears) - firstYear + 1,
+              },
+              (_, index) => ({
+                value: firstYear + index,
+                label: String(firstYear + index),
+              }),
+            )}
+            onChange={setYear}
+          />
+        </div>
+        <div className={styles.calendarRow} aria-hidden="true">
+          {weeks[0].map((day) => (
+            <span className={styles.calendarWeekday} key={day}>
+              {weekday.format(localDate(day)).slice(0, 2)}
+            </span>
+          ))}
+        </div>
+        {weeks.map((week) => (
+          <Link
+            key={week[0]}
+            className={styles.calendarRow}
+            href={`/?week=${week[0]}`}
+            aria-label={`Week ${weekNumber(week)}, ${weekRange(week)}`}
+            aria-current={week[0] === dates[0] ? "true" : undefined}
+            onClick={() => popover.current?.hidePopover()}
+          >
+            {week.map((day) => (
+              <span
+                key={day}
+                className={[
+                  styles.calendarDay,
+                  !inMonth(day) && styles.outside,
+                  day === today && styles.calendarToday,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {Number(day.slice(8))}
+              </span>
+            ))}
+          </Link>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function shortcutAllowed(event: globalThis.KeyboardEvent): boolean {
+  const target = event.target;
+  return !(
+    event.defaultPrevented ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    (target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target.closest("input, textarea, select"))) ||
+    document.querySelector(":popover-open")
+  );
+}
+
+// why: like a button, a shortcut shows its control pressed while held and acts on release; event.code keeps letters working in any keyboard layout
+function useShortcut(code: string, action: () => void): boolean {
+  const [pressed, setPressed] = useState(false);
+  const act = useEffectEvent(action);
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.code !== code || !shortcutAllowed(event)) return;
+      event.preventDefault();
+      setPressed(true);
+    }
+    function onKeyUp(event: globalThis.KeyboardEvent) {
+      if (event.code !== code || !pressed) return;
+      setPressed(false);
+      act();
+    }
+    const release = () => setPressed(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", release);
+    };
+  }, [code, pressed]);
+  return pressed;
 }
 
 export function DetectTimeZone() {
@@ -346,21 +719,27 @@ export function DetectTimeZone() {
 export function Week({
   today,
   dates,
+  weekStartsOn,
   tasks: initialTasks,
   menu,
 }: {
   today: string;
   dates: string[];
+  weekStartsOn: WeekStart;
   tasks: DayTask[];
   menu: ReactNode;
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [editing, setEditing] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const previousWeek = `/?week=${addDays(dates[0], -7)}`;
+  const nextWeek = `/?week=${addDays(dates[0], 7)}`;
+  const router = useRouter();
+  const back = useShortcut("ArrowLeft", () => router.push(previousWeek));
+  const forward = useShortcut("ArrowRight", () => router.push(nextWeek));
+  const toToday = useShortcut("KeyT", () => router.push("/"));
 
   const days = dates.map(localDate);
-  const first = days[0];
-  const last = days[6];
   const byDay = dates.map((date) => tasks.filter((task) => task.date === date));
   const draftsByDay = dates.map((date) =>
     drafts.filter((draft) => draft.date === date),
@@ -405,21 +784,27 @@ export function Week({
       <header className={styles.header}>
         <div className={styles.title}>
           <h1 className={styles.week}>Week {weekNumber(dates)}</h1>
-          <span className={styles.range}>
-            {first.getMonth() === last.getMonth()
-              ? `${first.getDate()}–${dateRange.format(last)}`
-              : dateRange.formatRange(first, last)}
-          </span>
+          <span className={styles.range}>{weekRange(dates)}</span>
         </div>
         <nav className={styles.tools} aria-label="Planner">
           <WeekLink
             label="Previous week"
-            href={`/?week=${addDays(dates[0], -7)}`}
+            href={previousWeek}
+            shortcut="ArrowLeft"
+            pressed={back}
           >
             ‹
           </WeekLink>
-          <WeekLink href="/">Today</WeekLink>
-          <WeekLink label="Next week" href={`/?week=${addDays(dates[0], 7)}`}>
+          <GoTo today={today} dates={dates} weekStartsOn={weekStartsOn} />
+          <WeekLink href="/" shortcut="T" pressed={toToday}>
+            Today
+          </WeekLink>
+          <WeekLink
+            label="Next week"
+            href={nextWeek}
+            shortcut="ArrowRight"
+            pressed={forward}
+          >
             ›
           </WeekLink>
           {menu}

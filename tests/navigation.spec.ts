@@ -33,7 +33,7 @@ test("a user pages through weeks, the URL keeps the week across a reload, and To
   await expect(page).toHaveURL(/\/\?week=2026-11-16$/);
   await expect(heading(page)).toHaveText("Week 47");
   await expect(range(page, "16–22 November 2026")).toBeVisible();
-  await expect(page.locator("[aria-current]")).toHaveCount(0);
+  await expect(page.locator("[aria-current]:visible")).toHaveCount(0);
 
   await addTask(page, "18 Wed", "Dentist");
   await page.reload();
@@ -132,4 +132,150 @@ test("today follows the time zone the browser reported at the first sign-in", as
     await expect(page.getByRole("heading", { name: "15 Today" })).toBeVisible();
     await context.close();
   }
+});
+
+test("the calendar button opens a month calendar below the button and picks a whole week", async ({
+  page,
+}) => {
+  await pinServerClock(page.context(), "2026-11-14T10:00:00+03:00");
+  await signIn(page);
+
+  const goTo = page.getByRole("button", { name: "Go to week" });
+  await goTo.click();
+  const picker = page.getByRole("dialog", { name: "Go to week" });
+  await expect(picker).toBeVisible();
+  const button = (await goTo.boundingBox())!;
+  expect((await picker.boundingBox())!.y).toBeGreaterThanOrEqual(
+    button.y + button.height,
+  );
+  const month = picker.getByRole("combobox", { name: "Month" });
+  const year = picker.getByRole("combobox", { name: "Year" });
+  await expect(month).toHaveText("November");
+  await expect(year).toHaveText("2026");
+  await expect(
+    picker.getByRole("link", { name: "Week 46, 9–15 November 2026" }),
+  ).toHaveAttribute("aria-current", "true");
+
+  await month.click();
+  const months = page.getByRole("listbox", { name: "Month" });
+  await expect(month).toHaveAttribute("aria-expanded", "true");
+  await expect(months.getByRole("option", { name: "November" })).toBeFocused();
+  const monthButton = (await month.boundingBox())!;
+  expect((await months.boundingBox())!.y).toBeGreaterThanOrEqual(
+    monthButton.y + monthButton.height,
+  );
+  for (let step = 0; step < 9; step++) await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(months).toBeHidden();
+  await expect(month).toHaveText("February");
+  await expect(month).toBeFocused();
+  await expect(picker).toBeVisible();
+
+  await year.click();
+  await page
+    .getByRole("listbox", { name: "Year" })
+    .getByRole("option", { name: "2028" })
+    .click();
+  await expect(year).toHaveText("2028");
+  await expect(picker.getByRole("link")).toHaveCount(5);
+  await picker.getByRole("link", { name: /^Week 9, 28 February/ }).click();
+
+  await expect(page).toHaveURL(/\/\?week=2028-02-28$/);
+  await expect(heading(page)).toHaveText("Week 9");
+  await expect(picker).toBeHidden();
+});
+
+test("the arrow keys page through weeks unless the user is typing or a popup is open", async ({
+  page,
+}) => {
+  await pinServerClock(page.context(), "2026-11-14T10:00:00+03:00");
+  await signIn(page);
+  await expect(heading(page)).toHaveText("Week 46");
+
+  const next = page.getByRole("link", { name: "Next week" });
+  await page.keyboard.down("ArrowRight");
+  await expect(next).toHaveAttribute("data-pressed", "true");
+  await expect(next).toHaveCSS("background-color", "rgb(227, 232, 236)");
+  await expect(heading(page)).toHaveText("Week 46");
+  await page.keyboard.up("ArrowRight");
+  await expect(page).toHaveURL(/\/\?week=2026-11-16$/);
+  await expect(next).not.toHaveAttribute("data-pressed");
+  await expect(heading(page)).toHaveText("Week 47");
+  await page.keyboard.press("ArrowLeft");
+  await expect(heading(page)).toHaveText("Week 46");
+  await page.keyboard.press("ArrowLeft");
+  await expect(heading(page)).toHaveText("Week 45");
+
+  await day(page, "04 Wed").getByRole("button", { name: "Add task" }).click();
+  const input = day(page, "04 Wed").getByRole("textbox", { name: "New task" });
+  await input.fill("Typing");
+  await input.press("ArrowLeft");
+  await input.press("ArrowRight");
+  await expect(heading(page)).toHaveText("Week 45");
+  await input.press("Escape");
+
+  await page.getByRole("button", { name: "Go to week" }).click();
+  await page.keyboard.press("ArrowRight");
+  await expect(heading(page)).toHaveText("Week 45");
+  await expect(page).toHaveURL(/\/\?week=2026-11-02$/);
+  await page.keyboard.press("Escape");
+
+  const today = page.getByRole("link", { name: "Today", exact: true });
+  await page.keyboard.down("KeyT");
+  await expect(today).toHaveAttribute("data-pressed", "true");
+  await page.keyboard.up("KeyT");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(heading(page)).toHaveText("Week 46");
+});
+
+test("the keyboard alone opens the calendar, picks a month and a year and opens a week", async ({
+  page,
+}) => {
+  await pinServerClock(page.context(), "2026-11-14T10:00:00+03:00");
+  await signIn(page);
+  await expect(heading(page)).toHaveText("Week 46");
+
+  const button = page.getByRole("button", { name: "Go to week" });
+  const picker = page.getByRole("dialog", { name: "Go to week" });
+  await page.keyboard.down("KeyG");
+  await expect(button).toHaveAttribute("data-pressed", "true");
+  await expect(picker).toBeHidden();
+  await page.keyboard.up("KeyG");
+  await expect(picker).toBeVisible();
+  await expect(picker.getByRole("link", { name: /^Week 46,/ })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(picker.getByRole("link", { name: /^Week 47,/ })).toBeFocused();
+
+  await page.keyboard.press("KeyM");
+  const months = page.getByRole("listbox", { name: "Month" });
+  await expect(months.getByRole("option", { name: "November" })).toBeFocused();
+  for (let step = 0; step < 9; step++) await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(months).toBeHidden();
+  await expect(picker.getByRole("combobox", { name: "Month" })).toHaveText(
+    "February",
+  );
+
+  await page.keyboard.press("KeyY");
+  const years = page.getByRole("listbox", { name: "Year" });
+  await expect(years.getByRole("option", { name: "2026" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(picker.getByRole("combobox", { name: "Year" })).toHaveText(
+    "2028",
+  );
+
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    picker.getByRole("link", { name: /^Week 5, 31 January/ }),
+  ).toBeFocused();
+  for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowDown");
+  await expect(
+    picker.getByRole("link", { name: /^Week 9, 28 February/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/\?week=2028-02-28$/);
+  await expect(heading(page)).toHaveText("Week 9");
+  await expect(picker).toBeHidden();
 });

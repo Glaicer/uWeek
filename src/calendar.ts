@@ -38,6 +38,19 @@ export function weekOf(value: string, weekStartsOn: WeekStart): string[] {
   return Array.from({ length: 7 }, (_, offset) => addDays(first, offset));
 }
 
+export function monthWeeks(
+  year: number,
+  month: number,
+  weekStartsOn: WeekStart,
+): string[][] {
+  const first = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-01`;
+  const last = addDays(addDays(first, 31).slice(0, 8) + "01", -1);
+  const weeks = [weekOf(first, weekStartsOn)];
+  while (weeks.at(-1)![6] < last)
+    weeks.push(weekOf(addDays(weeks.at(-1)![0], 7), weekStartsOn));
+  return weeks;
+}
+
 export function weekNumber(week: string[]): number {
   return isoWeek(
     localDate(week.find((day) => utcDate(day).getUTCDay() === 4)!),

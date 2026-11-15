@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { todayIn, weekNumber, weekOf } from "./calendar";
+import { monthWeeks, todayIn, weekNumber, weekOf } from "./calendar";
 
 describe("todayIn", () => {
   const instant = new Date("2026-11-14T22:30:00Z");
@@ -105,5 +105,58 @@ describe("weekNumber", () => {
     expect(weekNumber(weekOf("2026-11-14", 0))).toBe(46);
     expect(weekNumber(weekOf("2026-11-15", 0))).toBe(47);
     expect(weekNumber(weekOf("2026-12-27", 0))).toBe(53);
+  });
+});
+
+describe("monthWeeks", () => {
+  const starts = (weeks: string[][]) => weeks.map((week) => week[0]);
+
+  test("lists every week that touches the month, including the days of the months around it", () => {
+    const weeks = monthWeeks(2026, 11, 1);
+    expect(starts(weeks)).toEqual([
+      "2026-10-26",
+      "2026-11-02",
+      "2026-11-09",
+      "2026-11-16",
+      "2026-11-23",
+      "2026-11-30",
+    ]);
+    expect(weeks[0]).toEqual(weekOf("2026-11-01", 1));
+    expect(weeks[5].at(-1)).toBe("2026-12-06");
+  });
+
+  test("follows a Sunday week start", () => {
+    expect(starts(monthWeeks(2026, 11, 0))).toEqual([
+      "2026-11-01",
+      "2026-11-08",
+      "2026-11-15",
+      "2026-11-22",
+      "2026-11-29",
+    ]);
+  });
+
+  test("a February that starts on Monday fits in four weeks", () => {
+    expect(starts(monthWeeks(2027, 2, 1))).toEqual([
+      "2027-02-01",
+      "2027-02-08",
+      "2027-02-15",
+      "2027-02-22",
+    ]);
+  });
+
+  test("a leap February keeps its 29th", () => {
+    const weeks = monthWeeks(2028, 2, 1);
+    expect(starts(weeks)).toEqual([
+      "2028-01-31",
+      "2028-02-07",
+      "2028-02-14",
+      "2028-02-21",
+      "2028-02-28",
+    ]);
+    expect(weeks[4]).toContain("2028-02-29");
+  });
+
+  test("December runs into the next year", () => {
+    expect(monthWeeks(2026, 12, 0).at(-1)).toEqual(weekOf("2027-01-02", 0));
   });
 });

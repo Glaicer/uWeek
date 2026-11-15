@@ -47,11 +47,70 @@
   color: var(--text);
   font: inherit;
   font-size: 14px;
+  white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    transform 0.08s;
 }
 
 .primary {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--background);
+}
+
+@media (hover: hover) {
+  .tool:hover,
+  .dropdown:hover {
+    border-color: var(--border-strong);
+    background: var(--hover);
+  }
+
+  .primary:hover {
+    border-color: var(--primary-hover);
+    background: var(--primary-hover);
+  }
+}
+
+.tool:focus,
+.dropdown:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.primary:focus {
+  border-color: var(--text);
+}
+
+.tool:active,
+.tool[data-pressed],
+.dropdown:active {
+  border-color: var(--border-strong);
+  background: var(--pressed);
+  transform: translateY(1px);
+}
+
+.primary:active {
+  border-color: var(--primary-pressed);
+  background: var(--primary-pressed);
+}
+
+.tool:disabled,
+.tool[aria-disabled="true"],
+.dropdown:disabled {
+  border-color: var(--border);
+  background: var(--background);
+  color: var(--secondary);
+  opacity: 0.55;
+  transform: none;
+  cursor: not-allowed;
+}
+
+.primary:disabled,
+.primary[aria-disabled="true"] {
   border-color: var(--text);
   background: var(--text);
   color: var(--background);
@@ -61,7 +120,194 @@
   anchor-name: --menu-button;
 }
 
+.goToButton {
+  anchor-name: --go-to-button;
+  font-size: 18px;
+}
+
+.picker {
+  position-anchor: --go-to-button;
+  inset: auto;
+  top: anchor(bottom);
+  left: anchor(left);
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--text);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.12);
+}
+
+.pickerHead {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dropdown {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    transform 0.08s;
+}
+
+.dropdown:first-child {
+  flex: 1;
+}
+
+.dropdown svg {
+  color: var(--secondary);
+  font-size: 18px;
+  transition: transform 0.15s;
+}
+
+.dropdown[aria-expanded="true"] {
+  border-color: var(--secondary);
+}
+
+.dropdown[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.options {
+  inset: auto;
+  top: anchor(bottom);
+  left: anchor(left);
+  min-width: anchor-size(width);
+  max-height: 240px;
+  margin: 4px 0 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 0;
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--text);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.14);
+}
+
+.options::-webkit-scrollbar {
+  width: 12px;
+}
+
+.options::-webkit-scrollbar-track {
+  margin: 6px 0;
+  background: transparent;
+}
+
+.options::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 999px;
+  background: var(--border) padding-box;
+}
+
+.options::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-strong);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .options {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+.option {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.option:hover,
+.option:focus {
+  outline: none;
+  background: var(--desk);
+}
+
+.option[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.calendarRow {
+  display: grid;
+  grid-template-columns: repeat(7, 36px);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.calendarRow {
+  margin-top: 2px;
+}
+
+.calendarRow:focus {
+  outline: none;
+}
+
+a.calendarRow:not([aria-current="true"]):hover,
+a.calendarRow:not([aria-current="true"]):focus {
+  background: var(--desk);
+}
+
+.calendarRow[aria-current="true"] {
+  background: var(--text);
+  color: var(--background);
+}
+
+.calendarWeekday,
+.calendarDay {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarWeekday {
+  color: var(--secondary);
+  font-size: 12px;
+}
+
+.outside {
+  opacity: 0.4;
+}
+
+.calendarToday {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.calendarRow[aria-current="true"] .calendarToday {
+  color: inherit;
+}
+
 .tool:focus-visible,
+.dropdown:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--border-strong);
+}
+
+.primary:focus-visible {
+  border-color: var(--text);
+}
+
 .menuItem:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -363,6 +609,10 @@
 
   .header {
     padding: 0 16px;
+  }
+
+  .tool {
+    padding: 0 10px;
   }
 
   .menu {

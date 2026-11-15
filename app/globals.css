@@ -7,6 +7,11 @@
   --danger: #b42318;
   --desk: #eef1f3;
   --background: #fff;
+  --hover: #f4f6f8;
+  --pressed: #e3e8ec;
+  --border-strong: #b4bfc9;
+  --primary-hover: #2e3b4a;
+  --primary-pressed: #0f161e;
   --row: 38px;
   color-scheme: light;
 }
