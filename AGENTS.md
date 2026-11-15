@@ -24,6 +24,10 @@ Icons are Boxicons from https://icon-sets.iconify.design/boxicons: copy the SVG 
 
 <!-- BEGIN:nextjs-agent-rules -->
 
+### CSS anchors
+
+CSS Modules rename dashed idents, so an `anchor-name` set inline (`style={{ anchorName }}`) never matches a `position-anchor` written in a `.module.css`: set both on the same side (see `Dropdown` and the list menu in `app/week.tsx`).
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
