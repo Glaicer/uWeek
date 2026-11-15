@@ -6,9 +6,11 @@ import {
   index,
   integer,
   pgTable,
+  smallint,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import type { WeekStart } from "../calendar";
 
 const createdAt = () =>
   timestamp({ withTimezone: true }).defaultNow().notNull();
@@ -18,15 +20,23 @@ const updatedAt = () =>
     .$onUpdate(() => new Date())
     .notNull();
 
-export const users = pgTable("users", {
-  id: text().primaryKey(),
-  name: text().notNull(),
-  email: text().notNull().unique(),
-  emailVerified: boolean().default(false).notNull(),
-  image: text(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    email: text().notNull().unique(),
+    emailVerified: boolean().default(false).notNull(),
+    image: text(),
+    timeZone: text(),
+    weekStartsOn: smallint().$type<WeekStart>().default(1).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    check("users_week_starts_on", sql`${table.weekStartsOn} in (0, 1)`),
+  ],
+);
 
 export const sessions = pgTable(
   "sessions",

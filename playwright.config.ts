@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import { testDatabaseUrl } from "./tests/database";
+import { testClockCookie } from "./tests/clock";
 import { outbox } from "./tests/mail";
 
 const port = 4172;
@@ -11,6 +12,7 @@ const env = {
   BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
   MAIL_FROM: "YourWeek <login@example.com>",
   MAIL_OUTBOX_DIR: outbox,
+  TEST_CLOCK_COOKIE: testClockCookie,
 };
 
 export default defineConfig({

@@ -1,8 +1,8 @@
 import { and, asc, between, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { validCalendarDate } from "./calendar";
+import { todayIn, validCalendarDate, weekOf, type WeekStart } from "./calendar";
 import { db } from "./db/client";
-import { tasks } from "./db/schema";
+import { tasks, users } from "./db/schema";
 
 export interface DayTask {
   id: string;
@@ -24,6 +24,37 @@ const edits = z
   );
 
 export type TaskEdits = z.input<typeof edits>;
+
+const timeZone = z.string().refine((zone) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}, "Unknown time zone");
+const settings = z
+  .object({
+    timeZone: timeZone.optional(),
+    weekStartsOn: z.coerce
+      .number()
+      .pipe(z.literal([0, 1]))
+      .optional(),
+  })
+  .refine(
+    (settings) =>
+      settings.timeZone !== undefined || settings.weekStartsOn !== undefined,
+    "Nothing to change",
+  );
+const weekQuery = z.object({ week: isoDate.optional() });
+
+export interface WeekView {
+  timeZone: string | null;
+  weekStartsOn: WeekStart;
+  today: string;
+  dates: string[];
+  tasks: DayTask[];
+}
 
 const dayTask = {
   id: tasks.id,
@@ -94,4 +125,54 @@ export async function deleteTask(userId: string, id: string): Promise<boolean> {
     .where(owned(userId, id))
     .returning({ id: tasks.id });
   return deleted.length > 0;
+}
+
+export async function updateSettings(
+  userId: string,
+  input: z.input<typeof settings>,
+): Promise<void> {
+  await db.update(users).set(settings.parse(input)).where(eq(users.id, userId));
+}
+
+async function rollOverUnfinishedTasks(userId: string, today: string) {
+  await db.execute(sql`
+    with moving as (
+      select ${tasks.id} as id,
+        row_number() over (order by ${tasks.date}, ${tasks.position}, ${tasks.id}) as n
+      from ${tasks}
+      where ${tasks.userId} = ${userId}
+        and ${tasks.date} < ${today}
+        and ${tasks.completedAt} is null
+    )
+    update ${tasks}
+    set date = ${today},
+      position = moving.n + (
+        select coalesce(max(position), -1) from ${tasks}
+        where user_id = ${userId} and date = ${today}
+      )
+    from moving
+    where ${tasks.id} = moving.id`);
+}
+
+export async function readWeek(
+  userId: string,
+  input: z.input<typeof weekQuery>,
+  now: Date,
+): Promise<WeekView> {
+  const { week } = weekQuery.parse(input);
+  const [user] = await db
+    .select({ timeZone: users.timeZone, weekStartsOn: users.weekStartsOn })
+    .from(users)
+    .where(eq(users.id, userId));
+  // why: before the browser reports a zone "today" is only a guess, so nothing is moved onto it
+  const today = todayIn(user.timeZone ?? "UTC", now);
+  if (user.timeZone) await rollOverUnfinishedTasks(userId, today);
+  const dates = weekOf(week ?? today, user.weekStartsOn);
+  return {
+    timeZone: user.timeZone,
+    weekStartsOn: user.weekStartsOn,
+    today,
+    dates,
+    tasks: await listTasks(userId, { from: dates[0], to: dates[6] }),
+  };
 }

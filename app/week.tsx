@@ -1,21 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import {
   startTransition,
   useEffect,
   useId,
   useOptimistic,
   useState,
-  useSyncExternalStore,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { calendarDate, currentWeek, isoWeek, localDate } from "../src/calendar";
+import { addDays, localDate, weekNumber } from "../src/calendar";
 import type { DayTask, TaskEdits } from "../src/planner";
-import { createTask, deleteTask, listTasks, updateTask } from "./actions";
+import { createTask, deleteTask, saveTimeZone, updateTask } from "./actions";
 import styles from "./week.module.css";
 
-const noSubscription = () => () => {};
 const dateRange = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
   month: "long",
@@ -24,16 +23,6 @@ const dateRange = new Intl.DateTimeFormat("en-GB", {
 const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
 const minRows = 5;
 const saveFailed = "Couldn't save. Try again.";
-
-// shortcut: "today" comes from the browser clock; ticket 04 stores the user's time zone and renders the week on the server
-function useToday(): Date | null {
-  const today = useSyncExternalStore(
-    noSubscription,
-    () => calendarDate(new Date()),
-    () => null,
-  );
-  return today === null ? null : localDate(today);
-}
 
 function Band({
   heading,
@@ -304,13 +293,11 @@ function TaskRow({
 function Tool({
   label,
   primary,
-  disabled,
   onClick,
   children,
 }: {
   label?: string;
   primary?: boolean;
-  disabled?: boolean;
   onClick?: () => void;
   children: ReactNode;
 }) {
@@ -319,7 +306,6 @@ function Tool({
       className={primary ? `${styles.tool} ${styles.primary}` : styles.tool}
       aria-label={label}
       type="button"
-      disabled={disabled}
       onClick={onClick}
     >
       {children}
@@ -327,41 +313,55 @@ function Tool({
   );
 }
 
-function useWeekTasks(from: string | null, to: string | null) {
-  const [loaded, setLoaded] = useState<DayTask[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!from || !to) return;
-    let current = true;
-    listTasks(from, to).then(
-      (tasks) => current && setLoaded(tasks),
-      () => current && setFailed(true),
-    );
-    return () => {
-      current = false;
-    };
-  }, [from, to]);
-  return [loaded, setLoaded, failed] as const;
+function WeekLink({
+  label,
+  href,
+  children,
+}: {
+  label?: string;
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link className={styles.tool} aria-label={label} href={href}>
+      {children}
+    </Link>
+  );
 }
 
-export function Week({ menu }: { menu: ReactNode }) {
-  const today = useToday();
-  const days = today ? currentWeek(today) : [];
-  const dates = days.map(calendarDate);
-  const [tasks, setTasks, loadFailed] = useWeekTasks(
-    dates[0] ?? null,
-    dates[6] ?? null,
-  );
+export function DetectTimeZone() {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    saveTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone).catch(() =>
+      setFailed(true),
+    );
+  }, []);
+  return failed ? (
+    <p className={styles.loadError} role="alert">
+      Couldn&apos;t load your week. Reload the page.
+    </p>
+  ) : null;
+}
+
+export function Week({
+  today,
+  dates,
+  tasks: initialTasks,
+  menu,
+}: {
+  today: string;
+  dates: string[];
+  tasks: DayTask[];
+  menu: ReactNode;
+}) {
+  const [tasks, setTasks] = useState(initialTasks);
   const [editing, setEditing] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  if (!today) return null;
 
-  const [monday, , , thursday, , , sunday] = days;
-  const todayDate = calendarDate(today);
-  const ready = tasks !== null;
-  const byDay = dates.map((date) =>
-    (tasks ?? []).filter((task) => task.date === date),
-  );
+  const days = dates.map(localDate);
+  const first = days[0];
+  const last = days[6];
+  const byDay = dates.map((date) => tasks.filter((task) => task.date === date));
   const draftsByDay = dates.map((date) =>
     drafts.filter((draft) => draft.date === date),
   );
@@ -369,7 +369,7 @@ export function Week({ menu }: { menu: ReactNode }) {
     ...byDay.map((day, index) => day.length + draftsByDay[index].length),
     0,
   ];
-  // why: bands facing each other across the spine (Mon↔Fri … Thu↔Someday) keep the same rows so the rules line up
+  // why: band i faces band i+4 across the spine (Mon↔Fri … Thu↔Someday, or Sun↔Thu … Wed↔Someday) and keeps the same rows so the rules line up
   const rows = counts.map((count, band) =>
     Math.max(minRows, Math.max(count, counts[(band + 4) % 8]) + 1),
   );
@@ -379,9 +379,9 @@ export function Week({ menu }: { menu: ReactNode }) {
   const close = (date: string) =>
     setEditing((dates) => dates.filter((open) => open !== date));
   const replace = (task: DayTask) =>
-    setTasks((tasks) => tasks!.map((t) => (t.id === task.id ? task : t)));
+    setTasks((tasks) => tasks.map((t) => (t.id === task.id ? task : t)));
   const remove = (id: string) =>
-    setTasks((tasks) => tasks!.filter((t) => t.id !== id));
+    setTasks((tasks) => tasks.filter((t) => t.id !== id));
   const discard = (draft: Draft) =>
     setDrafts((drafts) => drafts.filter((d) => d.id !== draft.id));
   async function saveDraft(draft: Draft) {
@@ -391,7 +391,7 @@ export function Week({ menu }: { menu: ReactNode }) {
     ]);
     try {
       const task = await createTask(draft.title, draft.date);
-      setTasks((tasks) => [...tasks!, task]);
+      setTasks((tasks) => [...tasks, task]);
       setDrafts((drafts) => drafts.filter((d) => d.id !== draft.id));
     } catch {
       setDrafts((drafts) =>
@@ -404,37 +404,37 @@ export function Week({ menu }: { menu: ReactNode }) {
     <main className={styles.page}>
       <header className={styles.header}>
         <div className={styles.title}>
-          <h1 className={styles.week}>Week {isoWeek(thursday)}</h1>
+          <h1 className={styles.week}>Week {weekNumber(dates)}</h1>
           <span className={styles.range}>
-            {monday.getMonth() === sunday.getMonth()
-              ? `${monday.getDate()}–${dateRange.format(sunday)}`
-              : dateRange.formatRange(monday, sunday)}
+            {first.getMonth() === last.getMonth()
+              ? `${first.getDate()}–${dateRange.format(last)}`
+              : dateRange.formatRange(first, last)}
           </span>
         </div>
         <nav className={styles.tools} aria-label="Planner">
-          {/* shortcut: week navigation arrives with ticket 04 */}
-          <Tool label="Previous week" disabled>
+          <WeekLink
+            label="Previous week"
+            href={`/?week=${addDays(dates[0], -7)}`}
+          >
             ‹
-          </Tool>
-          <Tool disabled>Today</Tool>
-          <Tool label="Next week" disabled>
+          </WeekLink>
+          <WeekLink href="/">Today</WeekLink>
+          <WeekLink label="Next week" href={`/?week=${addDays(dates[0], 7)}`}>
             ›
-          </Tool>
+          </WeekLink>
           {menu}
-          <Tool primary disabled={!ready} onClick={() => open(todayDate)}>
+          <Tool
+            primary
+            onClick={() => open(dates.includes(today) ? today : dates[0])}
+          >
             New task
           </Tool>
         </nav>
       </header>
-      {loadFailed && (
-        <p className={styles.loadError} role="alert">
-          Couldn&apos;t load your tasks. Reload the page.
-        </p>
-      )}
       <div className={styles.spread}>
         {days.map((date, index) => {
           const key = dates[index];
-          const isToday = key === todayDate;
+          const isToday = key === today;
           const children = [
             ...byDay[index].map((task) => (
               <TaskRow
@@ -473,7 +473,7 @@ export function Week({ menu }: { menu: ReactNode }) {
               key={key}
               current={isToday}
               rows={rows[index]}
-              onEmptyClick={ready ? () => open(key) : undefined}
+              onEmptyClick={() => open(key)}
               heading={
                 <>
                   <span className={styles.number}>

@@ -1,6 +1,7 @@
 "use server";
 
 import { APIError } from "better-auth/api";
+import { refresh } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "../src/auth";
@@ -51,8 +52,16 @@ async function currentUserId(): Promise<string> {
   return session.user.id;
 }
 
-export async function listTasks(from: string, to: string): Promise<DayTask[]> {
-  return planner.listTasks(await currentUserId(), { from, to });
+export async function saveTimeZone(timeZone: string): Promise<void> {
+  await planner.updateSettings(await currentUserId(), { timeZone });
+  refresh();
+}
+
+export async function setWeekStart(form: FormData): Promise<void> {
+  await planner.updateSettings(await currentUserId(), {
+    weekStartsOn: form.get("weekStartsOn"),
+  });
+  refresh();
 }
 
 export async function createTask(

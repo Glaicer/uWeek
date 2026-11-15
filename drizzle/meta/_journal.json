@@ -15,6 +15,13 @@
       "when": 1794724999538,
       "tag": "0001_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794726778939,
+      "tag": "0002_week_settings",
+      "breakpoints": true
     }
   ]
 }

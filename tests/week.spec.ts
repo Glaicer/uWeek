@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { pinServerClock } from "./clock";
 import { signIn } from "./mail";
 
 const bands = [
@@ -22,18 +23,15 @@ test("the current week is a two-page spread with today highlighted", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.clock.setFixedTime(new Date("2026-11-14T10:00:00+03:00"));
+  await pinServerClock(page.context(), "2026-11-14T10:00:00+03:00");
   await signIn(page);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Week 46");
   await expect(
     page.getByText("9–15 November 2026", { exact: true }),
   ).toBeVisible();
-  for (const name of ["Previous week", "Today", "Next week"]) {
-    await expect(
-      page.getByRole("button", { name, exact: true }),
-    ).toBeDisabled();
-  }
+  for (const name of ["Previous week", "Today", "Next week"])
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   for (const name of ["Menu", "New task"])
     await expect(page.getByRole("button", { name })).toBeEnabled();
 
@@ -64,7 +62,7 @@ test("a narrow screen shows one page: the days in order, then Someday", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.clock.setFixedTime(new Date("2026-11-14T10:00:00+03:00"));
+  await pinServerClock(page.context(), "2026-11-14T10:00:00+03:00");
   await signIn(page);
 
   let previous = await box(
@@ -82,7 +80,7 @@ test("a narrow screen shows one page: the days in order, then Someday", async ({
 test("the week number follows ISO 8601 across the new year", async ({
   page,
 }) => {
-  await page.clock.setFixedTime(new Date("2027-01-01T10:00:00+03:00"));
+  await pinServerClock(page.context(), "2027-01-01T10:00:00+03:00");
   await signIn(page);
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Week 53");

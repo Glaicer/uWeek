@@ -37,6 +37,8 @@
 }
 
 .tool {
+  display: inline-flex;
+  align-items: center;
   height: 34px;
   padding: 0 14px;
   border: 1px solid var(--border);
@@ -45,11 +47,8 @@
   color: var(--text);
   font: inherit;
   font-size: 14px;
+  text-decoration: none;
   cursor: pointer;
-}
-
-.tool:disabled {
-  cursor: default;
 }
 
 .primary {
@@ -98,6 +97,24 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.menuLabel {
+  margin: 0;
+  padding: 8px 16px 4px;
+  border-top: 1px solid var(--border);
+  color: var(--secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.menuItem[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.menuItem[aria-pressed="true"]::after {
+  content: " ✓";
 }
 
 .menuItem:hover {
