@@ -6,7 +6,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "../src/auth";
 import * as planner from "../src/planner";
-import type { DayTask, TaskEdits } from "../src/planner";
+import type { Placement } from "../src/model";
+import type { Task, TaskEdits, TaskList } from "../src/planner";
 
 export type SignInState =
   | { status: "idle" }
@@ -66,15 +67,12 @@ export async function setWeekStart(form: FormData): Promise<void> {
 
 export async function createTask(
   title: string,
-  date: string,
-): Promise<DayTask> {
-  return planner.createTask(await currentUserId(), { title, date });
+  placement: Placement,
+): Promise<Task> {
+  return planner.createTask(await currentUserId(), { title, ...placement });
 }
 
-export async function updateTask(
-  id: string,
-  edits: TaskEdits,
-): Promise<DayTask> {
+export async function updateTask(id: string, edits: TaskEdits): Promise<Task> {
   const task = await planner.updateTask(await currentUserId(), id, edits);
   if (!task) throw new Error("Task not found");
   return task;
@@ -83,4 +81,24 @@ export async function updateTask(
 export async function deleteTask(id: string): Promise<void> {
   if (!(await planner.deleteTask(await currentUserId(), id)))
     throw new Error("Task not found");
+}
+
+export async function createList(title: string): Promise<TaskList> {
+  return planner.createList(await currentUserId(), { title });
+}
+
+export async function renameList(id: string, title: string): Promise<TaskList> {
+  const list = await planner.renameList(await currentUserId(), id, { title });
+  if (!list) throw new Error("List not found");
+  return list;
+}
+
+export async function moveList(id: string, to: number): Promise<void> {
+  if (!(await planner.moveList(await currentUserId(), id, { to })))
+    throw new Error("List not found");
+}
+
+export async function deleteList(id: string): Promise<void> {
+  if (!(await planner.deleteList(await currentUserId(), id)))
+    throw new Error("List not deleted");
 }

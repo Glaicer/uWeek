@@ -22,6 +22,13 @@
       "when": 1794726778939,
       "tag": "0002_week_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794735816301,
+      "tag": "0003_someday_lists",
+      "breakpoints": true
     }
   ]
 }

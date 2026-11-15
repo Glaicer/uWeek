@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { flushSync } from "react-dom";
 import {
+  createContext,
   startTransition,
+  useContext,
   useEffect,
   useEffectEvent,
   useId,
@@ -21,8 +24,18 @@ import {
   weekNumber,
   type WeekStart,
 } from "../src/calendar";
-import type { DayTask, TaskEdits } from "../src/planner";
-import { createTask, deleteTask, saveTimeZone, updateTask } from "./actions";
+import type { Placement } from "../src/model";
+import type { Task, TaskEdits, TaskList } from "../src/planner";
+import {
+  createList,
+  createTask,
+  deleteList,
+  deleteTask,
+  moveList,
+  renameList,
+  saveTimeZone,
+  updateTask,
+} from "./actions";
 import styles from "./week.module.css";
 
 const dateRange = new Intl.DateTimeFormat("en-GB", {
@@ -57,6 +70,8 @@ const saveFailed = "Couldn't save. Try again.";
 
 function Band({
   heading,
+  aside,
+  panelOf,
   rows,
   className,
   current,
@@ -64,6 +79,8 @@ function Band({
   onEmptyClick,
 }: {
   heading: ReactNode;
+  aside?: ReactNode;
+  panelOf?: string;
   rows: number;
   className?: string;
   current?: boolean;
@@ -79,14 +96,21 @@ function Band({
         .join(" ")}
       aria-labelledby={id}
     >
-      <h2
-        className={styles.gutter}
-        id={id}
-        aria-current={current ? "date" : undefined}
+      <div className={styles.gutter}>
+        <h2
+          className={styles.heading}
+          id={id}
+          aria-current={current ? "date" : undefined}
+        >
+          {heading}
+        </h2>
+        {aside}
+      </div>
+      <div
+        className={styles.rows}
+        role={panelOf ? "tabpanel" : undefined}
+        aria-labelledby={panelOf}
       >
-        {heading}
-      </h2>
-      <div className={styles.rows}>
         {children}
         {Array.from({ length: rows - filled }, (_, row) =>
           row === 0 && onEmptyClick ? (
@@ -133,12 +157,14 @@ function useSave() {
 
 function TitleInput({
   label,
+  className = styles.input,
   value,
   onChange,
   onSubmit,
   onCancel,
 }: {
   label: string;
+  className?: string;
   value: string;
   onChange: (value: string) => void;
   onSubmit: (reopen: boolean) => void;
@@ -150,7 +176,7 @@ function TitleInput({
   }
   return (
     <input
-      className={styles.input}
+      className={className}
       aria-label={label}
       value={value}
       autoFocus
@@ -163,10 +189,12 @@ function TitleInput({
 
 interface Draft {
   id: string;
-  date: string;
+  placement: Placement;
   title: string;
   failed: boolean;
 }
+
+const placeOf = (placement: Placement) => placement.date ?? placement.listId;
 
 function NewTask({
   onSave,
@@ -266,8 +294,8 @@ function TaskRow({
   onChanged,
   onDeleted,
 }: {
-  task: DayTask;
-  onChanged: (task: DayTask) => void;
+  task: Task;
+  onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
 }) {
   const [renamed, setRenamed] = useState<string | null>(null);
@@ -702,6 +730,295 @@ function useShortcut(code: string, action: () => void): boolean {
   return pressed;
 }
 
+const tabId = (list: TaskList) => `list-${list.id}`;
+// why: the .tabs CSS makes the label and each tab two thirds of a row tall
+const tabRows = (lists: number) => Math.ceil(((lists + 1) * 2) / 3);
+
+const SelectedList = createContext<[string | undefined, (id: string) => void]>([
+  undefined,
+  () => {},
+]);
+
+export function KeepSelectedList({ children }: { children: ReactNode }) {
+  const selected = useState<string>();
+  return <SelectedList value={selected}>{children}</SelectedList>;
+}
+
+function ListTabs({
+  lists,
+  selected,
+  count,
+  onSelect,
+  onListsChange,
+  onDeleted,
+}: {
+  lists: TaskList[];
+  selected: TaskList;
+  count: number;
+  onSelect: (list: TaskList) => void;
+  onListsChange: (lists: TaskList[]) => void;
+  onDeleted: (list: TaskList) => void;
+}) {
+  const tablist = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const confirm = useRef<HTMLDialogElement>(null);
+  const [editing, setEditing] = useState<"rename" | "new" | null>(null);
+  const [title, setTitle] = useState("");
+  const [refocus, setRefocus] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const { save, alert } = useSave();
+  const refocusTab = () => setRefocus((n) => n + 1);
+
+  async function change(work: () => Promise<void>): Promise<boolean> {
+    setBusy(true);
+    const saved = await save(work);
+    setBusy(false);
+    return saved;
+  }
+  const index = lists.indexOf(selected);
+
+  useEffect(() => {
+    if (refocus)
+      tablist.current
+        ?.querySelector<HTMLElement>('[aria-selected="true"]')
+        ?.focus();
+  }, [refocus]);
+
+  function openMenu(list: TaskList, buttons = 0) {
+    flushSync(() => onSelect(list));
+    const show = () => menu.current?.showPopover();
+    // why: where the context menu fires on press, releasing the button would light-dismiss a menu opened at once
+    if (buttons & 2)
+      window.addEventListener("pointerup", () => setTimeout(show), {
+        once: true,
+      });
+    else show();
+  }
+
+  function startEditing(mode: "rename" | "new") {
+    menu.current?.hidePopover();
+    setTitle(mode === "rename" ? selected.title : "");
+    setEditing(mode);
+  }
+
+  function stopEditing() {
+    setEditing(null);
+    refocusTab();
+  }
+
+  async function submit() {
+    if (!editing || busy) return;
+    const text = title.trim();
+    if (!text || (editing === "rename" && text === selected.title))
+      return stopEditing();
+    const saved = await change(async () => {
+      if (editing === "rename") {
+        const list = await renameList(selected.id, text);
+        onListsChange(lists.map((l) => (l.id === list.id ? list : l)));
+      } else {
+        const list = await createList(text);
+        onListsChange([...lists, list]);
+        onSelect(list);
+      }
+    });
+    if (saved) stopEditing();
+  }
+
+  async function move(step: number) {
+    menu.current?.hidePopover();
+    const to = index + step;
+    await change(async () => {
+      await moveList(selected.id, to);
+      const order = lists.filter((list) => list !== selected);
+      order.splice(to, 0, selected);
+      onListsChange(order);
+    });
+    refocusTab();
+  }
+
+  async function remove() {
+    confirm.current?.close();
+    await change(async () => {
+      await deleteList(selected.id);
+      onDeleted(selected);
+    });
+    refocusTab();
+  }
+
+  function onTabKeyDown(event: KeyboardEvent) {
+    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const next = lists[Math.min(Math.max(index + step, 0), lists.length - 1)];
+    onSelect(next);
+    document.getElementById(tabId(next))?.focus();
+  }
+
+  function onMenuKeyDown(event: KeyboardEvent) {
+    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const items = Array.from(
+      menu.current?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"]:not(:disabled)',
+      ) ?? [],
+    );
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    items[(at + step + items.length) % items.length]?.focus();
+  }
+
+  const input = (label: string) => (
+    <TitleInput
+      key={label}
+      label={label}
+      className={`${styles.tab} ${styles.tabInput}`}
+      value={title}
+      onChange={setTitle}
+      onSubmit={submit}
+      onCancel={stopEditing}
+    />
+  );
+
+  return (
+    <>
+      <div
+        className={styles.tabs}
+        ref={tablist}
+        role="tablist"
+        aria-label="Lists"
+        aria-orientation="vertical"
+      >
+        {lists.map((list) =>
+          editing === "rename" && list === selected ? (
+            input("List name")
+          ) : (
+            <button
+              key={list.id}
+              className={styles.tab}
+              id={tabId(list)}
+              style={list === selected ? { anchorName: "--list-menu" } : {}}
+              type="button"
+              role="tab"
+              title={list.title}
+              aria-selected={list === selected}
+              aria-haspopup={list === selected ? "menu" : undefined}
+              tabIndex={list === selected ? 0 : -1}
+              disabled={busy}
+              onClick={() =>
+                list === selected ? openMenu(list) : onSelect(list)
+              }
+              onContextMenu={(event) => {
+                event.preventDefault();
+                openMenu(list, event.buttons);
+              }}
+              onKeyDown={onTabKeyDown}
+            >
+              {list.title}
+            </button>
+          ),
+        )}
+        {editing === "new" && input("New list")}
+      </div>
+      {alert}
+      <div
+        className={`${styles.menu} ${styles.listMenu}`}
+        style={{ positionAnchor: "--list-menu" }}
+        ref={menu}
+        id="list-menu"
+        popover="auto"
+        role="menu"
+        aria-label={`${selected.title} list`}
+        onKeyDown={onMenuKeyDown}
+        onToggle={(event) => {
+          if (event.newState === "open")
+            event.currentTarget
+              .querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')
+              ?.focus();
+        }}
+      >
+        <button
+          className={styles.menuItem}
+          role="menuitem"
+          type="button"
+          onClick={() => startEditing("rename")}
+        >
+          Rename
+        </button>
+        <button
+          className={styles.menuItem}
+          role="menuitem"
+          type="button"
+          disabled={index === 0}
+          onClick={() => move(-1)}
+        >
+          Move up
+        </button>
+        <button
+          className={styles.menuItem}
+          role="menuitem"
+          type="button"
+          disabled={index === lists.length - 1}
+          onClick={() => move(1)}
+        >
+          Move down
+        </button>
+        <button
+          className={styles.menuItem}
+          role="menuitem"
+          type="button"
+          onClick={() => startEditing("new")}
+        >
+          New list
+        </button>
+        <button
+          className={`${styles.menuItem} ${styles.danger}`}
+          role="menuitem"
+          type="button"
+          disabled={lists.length === 1}
+          title={
+            lists.length === 1 ? "The only list can't be deleted" : undefined
+          }
+          onClick={() => {
+            menu.current?.hidePopover();
+            if (count) confirm.current?.showModal();
+            else remove();
+          }}
+        >
+          Delete
+        </button>
+      </div>
+      <dialog
+        className={styles.confirm}
+        ref={confirm}
+        aria-labelledby="delete-list"
+        onClose={refocusTab}
+      >
+        <p id="delete-list">
+          Delete “{selected.title}” and its {count}{" "}
+          {count === 1 ? "task" : "tasks"}?
+        </p>
+        <div className={styles.confirmActions}>
+          <button
+            className={styles.tool}
+            type="button"
+            autoFocus
+            onClick={() => confirm.current?.close()}
+          >
+            Cancel
+          </button>
+          <button
+            className={`${styles.tool} ${styles.destructive}`}
+            type="button"
+            onClick={remove}
+          >
+            Delete
+          </button>
+        </div>
+      </dialog>
+    </>
+  );
+}
+
 export function DetectTimeZone() {
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -720,16 +1037,21 @@ export function Week({
   today,
   dates,
   weekStartsOn,
+  lists: initialLists,
   tasks: initialTasks,
   menu,
 }: {
   today: string;
   dates: string[];
   weekStartsOn: WeekStart;
-  tasks: DayTask[];
+  lists: TaskList[];
+  tasks: Task[];
   menu: ReactNode;
 }) {
   const [tasks, setTasks] = useState(initialTasks);
+  const [lists, setLists] = useState(initialLists);
+  const [selectedId, setSelectedId] = useContext(SelectedList);
+  const selected = lists.find((list) => list.id === selectedId) ?? lists[0];
   const [editing, setEditing] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const previousWeek = `/?week=${addDays(dates[0], -7)}`;
@@ -740,24 +1062,30 @@ export function Week({
   const toToday = useShortcut("KeyT", () => router.push("/"));
 
   const days = dates.map(localDate);
-  const byDay = dates.map((date) => tasks.filter((task) => task.date === date));
-  const draftsByDay = dates.map((date) =>
-    drafts.filter((draft) => draft.date === date),
+  const places = [...dates, selected.id];
+  const byPlace = places.map((place) =>
+    tasks.filter((task) => placeOf(task) === place),
   );
-  const counts = [
-    ...byDay.map((day, index) => day.length + draftsByDay[index].length),
-    0,
-  ];
+  const draftsByPlace = places.map((place) =>
+    drafts.filter((draft) => placeOf(draft.placement) === place),
+  );
+  const counts = byPlace.map(
+    (place, index) => place.length + draftsByPlace[index].length,
+  );
+  const listCount = counts[7];
+  counts[7] = Math.max(listCount, tabRows(lists.length) - 1);
   // why: band i faces band i+4 across the spine (Mon↔Fri … Thu↔Someday, or Sun↔Thu … Wed↔Someday) and keeps the same rows so the rules line up
   const rows = counts.map((count, band) =>
     Math.max(minRows, Math.max(count, counts[(band + 4) % 8]) + 1),
   );
 
-  const open = (date: string) =>
-    setEditing((dates) => (dates.includes(date) ? dates : [...dates, date]));
-  const close = (date: string) =>
-    setEditing((dates) => dates.filter((open) => open !== date));
-  const replace = (task: DayTask) =>
+  const open = (place: string) =>
+    setEditing((places) =>
+      places.includes(place) ? places : [...places, place],
+    );
+  const close = (place: string) =>
+    setEditing((places) => places.filter((open) => open !== place));
+  const replace = (task: Task) =>
     setTasks((tasks) => tasks.map((t) => (t.id === task.id ? task : t)));
   const remove = (id: string) =>
     setTasks((tasks) => tasks.filter((t) => t.id !== id));
@@ -769,7 +1097,7 @@ export function Week({
       { ...draft, failed: false },
     ]);
     try {
-      const task = await createTask(draft.title, draft.date);
+      const task = await createTask(draft.title, draft.placement);
       setTasks((tasks) => [...tasks, task]);
       setDrafts((drafts) => drafts.filter((d) => d.id !== draft.id));
     } catch {
@@ -777,6 +1105,51 @@ export function Week({
         drafts.map((d) => (d.id === draft.id ? { ...d, failed: true } : d)),
       );
     }
+  }
+
+  function rowsOf(index: number, placement: Placement): ReactNode[] {
+    const key = placeOf(placement);
+    const children = [
+      ...byPlace[index].map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          onChanged={replace}
+          onDeleted={remove}
+        />
+      )),
+      ...draftsByPlace[index].map((draft) => (
+        <DraftRow
+          key={draft.id}
+          draft={draft}
+          onRetry={saveDraft}
+          onDiscard={discard}
+        />
+      )),
+    ];
+    if (editing.includes(key))
+      children.push(
+        <NewTask
+          key="new"
+          onSave={(title) =>
+            saveDraft({
+              id: crypto.randomUUID(),
+              placement,
+              title,
+              failed: false,
+            })
+          }
+          onClose={() => close(key)}
+        />,
+      );
+    return children;
+  }
+
+  function deleted(list: TaskList) {
+    const rest = lists.filter((l) => l !== list);
+    setLists(rest);
+    setTasks((tasks) => tasks.filter((task) => task.listId !== list.id));
+    setSelectedId(rest[Math.max(lists.indexOf(list) - 1, 0)].id);
   }
 
   return (
@@ -820,39 +1193,6 @@ export function Week({
         {days.map((date, index) => {
           const key = dates[index];
           const isToday = key === today;
-          const children = [
-            ...byDay[index].map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                onChanged={replace}
-                onDeleted={remove}
-              />
-            )),
-            ...draftsByDay[index].map((draft) => (
-              <DraftRow
-                key={draft.id}
-                draft={draft}
-                onRetry={saveDraft}
-                onDiscard={discard}
-              />
-            )),
-          ];
-          if (editing.includes(key))
-            children.push(
-              <NewTask
-                key="new"
-                onSave={(title) =>
-                  saveDraft({
-                    id: crypto.randomUUID(),
-                    date: key,
-                    title,
-                    failed: false,
-                  })
-                }
-                onClose={() => close(key)}
-              />,
-            );
           return (
             <Band
               key={key}
@@ -870,15 +1210,29 @@ export function Week({
                 </>
               }
             >
-              {children}
+              {rowsOf(index, { date: key })}
             </Band>
           );
         })}
         <Band
           className={styles.someday}
           rows={rows[7]}
+          panelOf={tabId(selected)}
+          onEmptyClick={() => open(selected.id)}
           heading={<span className={styles.weekday}>Someday</span>}
-        />
+          aside={
+            <ListTabs
+              lists={lists}
+              selected={selected}
+              count={listCount}
+              onSelect={(list) => setSelectedId(list.id)}
+              onListsChange={setLists}
+              onDeleted={deleted}
+            />
+          }
+        >
+          {rowsOf(7, { listId: selected.id })}
+        </Band>
       </div>
     </main>
   );

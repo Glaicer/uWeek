@@ -3,12 +3,14 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   pgTable,
   smallint,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 import type { WeekStart } from "../calendar";
 
@@ -90,6 +92,21 @@ export const verifications = pgTable(
   (table) => [index().on(table.identifier)],
 );
 
+export const lists = pgTable(
+  "lists",
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    position: integer().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [unique("lists_user_id_id_unique").on(table.userId, table.id)],
+);
+
 export const tasks = pgTable(
   "tasks",
   {
@@ -99,7 +116,6 @@ export const tasks = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     title: text().notNull(),
     date: date({ mode: "string" }),
-    // shortcut: references lists(id) once ticket 05 creates the lists table
     listId: text(),
     position: integer().notNull(),
     completedAt: timestamp({ withTimezone: true }),
@@ -108,6 +124,12 @@ export const tasks = pgTable(
   },
   (table) => [
     index().on(table.userId, table.date),
+    index().on(table.userId, table.listId),
+    // why: the user is part of the key, so a task can only sit in its owner's list
+    foreignKey({
+      columns: [table.userId, table.listId],
+      foreignColumns: [lists.userId, lists.id],
+    }).onDelete("cascade"),
     check(
       "tasks_date_xor_list",
       sql`(${table.date} is null) <> (${table.listId} is null)`,

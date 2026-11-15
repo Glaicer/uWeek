@@ -1,21 +1,32 @@
-import { and, asc, between, eq, sql } from "drizzle-orm";
+import { and, asc, between, eq, isNotNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { todayIn, validCalendarDate, weekOf, type WeekStart } from "./calendar";
 import { db } from "./db/client";
-import { tasks, users } from "./db/schema";
+import { lists, tasks, users } from "./db/schema";
+import type { Placement } from "./model";
 
-export interface DayTask {
+export type Task = {
   id: string;
   title: string;
-  date: string;
   completed: boolean;
+} & Placement;
+
+export interface TaskList {
+  id: string;
+  title: string;
 }
 
 const isoDate = z.string().refine(validCalendarDate, "Invalid date");
 const title = z.string().trim().min(1).max(500);
 const taskId = z.uuid();
 const range = z.object({ from: isoDate, to: isoDate });
-const newTask = z.object({ title, date: isoDate });
+const newTask = z.xor([
+  z.object({ title, date: isoDate }),
+  z.object({ title, listId: z.uuid() }),
+]);
+const newList = z.object({ title });
+const listId = z.uuid();
+const listMove = z.object({ to: z.int().min(0) });
 const edits = z
   .object({ title: title.optional(), completed: z.boolean().optional() })
   .refine(
@@ -53,15 +64,46 @@ export interface WeekView {
   weekStartsOn: WeekStart;
   today: string;
   dates: string[];
-  tasks: DayTask[];
+  lists: TaskList[];
+  tasks: Task[];
 }
 
-const dayTask = {
+const taskColumns = {
   id: tasks.id,
   title: tasks.title,
-  date: sql<string>`${tasks.date}`,
+  date: tasks.date,
+  listId: tasks.listId,
   completed: sql<boolean>`${tasks.completedAt} is not null`,
 };
+
+function toTask({
+  date,
+  listId,
+  ...task
+}: {
+  id: string;
+  title: string;
+  completed: boolean;
+  date: string | null;
+  listId: string | null;
+}): Task {
+  if (date !== null) return { ...task, date };
+  if (listId !== null) return { ...task, listId };
+  throw new Error(`Task ${task.id} has neither a date nor a list`);
+}
+
+const taskOrder = [
+  asc(tasks.date),
+  asc(tasks.position),
+  asc(tasks.createdAt),
+  asc(tasks.id),
+];
+
+const listColumns = { id: lists.id, title: lists.title };
+const listOrder = [asc(lists.position), asc(lists.createdAt), asc(lists.id)];
+
+const ownedList = (userId: string, id: string) =>
+  and(eq(lists.userId, userId), eq(lists.id, listId.parse(id)));
 
 const owned = (userId: string, id: string) =>
   and(eq(tasks.userId, userId), eq(tasks.id, taskId.parse(id)));
@@ -69,43 +111,140 @@ const owned = (userId: string, id: string) =>
 export async function listTasks(
   userId: string,
   input: z.input<typeof range>,
-): Promise<DayTask[]> {
+): Promise<Task[]> {
   const { from, to } = range.parse(input);
-  return db
-    .select(dayTask)
+  const rows = await db
+    .select(taskColumns)
     .from(tasks)
     .where(and(eq(tasks.userId, userId), between(tasks.date, from, to)))
-    .orderBy(
-      asc(tasks.date),
-      asc(tasks.position),
-      asc(tasks.createdAt),
-      asc(tasks.id),
-    );
+    .orderBy(...taskOrder);
+  return rows.map(toTask);
+}
+
+async function listsAndTheirTasks(userId: string, from: string, to: string) {
+  const [userLists, rows] = await Promise.all([
+    db
+      .select(listColumns)
+      .from(lists)
+      .where(eq(lists.userId, userId))
+      .orderBy(...listOrder),
+    db
+      .select(taskColumns)
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          or(between(tasks.date, from, to), isNotNull(tasks.listId)),
+        ),
+      )
+      .orderBy(...taskOrder),
+  ]);
+  return { lists: userLists, tasks: rows.map(toTask) };
 }
 
 export async function createTask(
   userId: string,
   input: z.input<typeof newTask>,
-): Promise<DayTask> {
-  const { title, date } = newTask.parse(input);
+): Promise<Task> {
+  const { title, ...placement } = newTask.parse(input);
+  const sibling =
+    "date" in placement
+      ? eq(tasks.date, placement.date)
+      : eq(tasks.listId, placement.listId);
   const [task] = await db
     .insert(tasks)
     .values({
       id: crypto.randomUUID(),
       userId,
       title,
-      date,
-      position: sql`(select coalesce(max(${tasks.position}), -1) + 1 from ${tasks} where ${tasks.userId} = ${userId} and ${tasks.date} = ${date})`,
+      ...placement,
+      position: sql`(select coalesce(max(${tasks.position}), -1) + 1 from ${tasks} where ${tasks.userId} = ${userId} and ${sibling})`,
     })
-    .returning(dayTask);
-  return task;
+    .returning(taskColumns);
+  return toTask(task);
+}
+
+export async function createList(
+  userId: string,
+  input: z.input<typeof newList>,
+): Promise<TaskList> {
+  const { title } = newList.parse(input);
+  const [list] = await db
+    .insert(lists)
+    .values({
+      id: crypto.randomUUID(),
+      userId,
+      title,
+      position: sql`(select coalesce(max(${lists.position}), -1) + 1 from ${lists} where ${lists.userId} = ${userId})`,
+    })
+    .returning(listColumns);
+  return list;
+}
+
+export async function renameList(
+  userId: string,
+  id: string,
+  input: z.input<typeof newList>,
+): Promise<TaskList | null> {
+  const { title } = newList.parse(input);
+  const [list] = await db
+    .update(lists)
+    .set({ title })
+    .where(ownedList(userId, id))
+    .returning(listColumns);
+  return list ?? null;
+}
+
+export async function moveList(
+  userId: string,
+  id: string,
+  input: z.input<typeof listMove>,
+): Promise<boolean> {
+  const { to } = listMove.parse(input);
+  listId.parse(id);
+  return db.transaction(async (tx) => {
+    const order = (
+      await tx
+        .select({ id: lists.id })
+        .from(lists)
+        .where(eq(lists.userId, userId))
+        .orderBy(...listOrder)
+        .for("update")
+    ).map((list) => list.id);
+    const from = order.indexOf(id);
+    if (from < 0) return false;
+    order.splice(from, 1);
+    order.splice(Math.min(to, order.length), 0, id);
+    for (const [position, list] of order.entries())
+      await tx
+        .update(lists)
+        .set({ position })
+        .where(and(eq(lists.userId, userId), eq(lists.id, list)));
+    return true;
+  });
+}
+
+export async function deleteList(userId: string, id: string): Promise<boolean> {
+  listId.parse(id);
+  return db.transaction(async (tx) => {
+    const userLists = await tx
+      .select({ id: lists.id })
+      .from(lists)
+      .where(eq(lists.userId, userId))
+      .for("update");
+    // why: the Someday band always has a list to write into
+    if (userLists.length < 2 || !userLists.some((list) => list.id === id))
+      return false;
+    await tx.delete(lists).where(ownedList(userId, id));
+    return true;
+  });
 }
 
 export async function updateTask(
   userId: string,
   id: string,
   input: TaskEdits,
-): Promise<DayTask | null> {
+): Promise<Task | null> {
   const { title, completed } = edits.parse(input);
   const [task] = await db
     .update(tasks)
@@ -115,8 +254,8 @@ export async function updateTask(
         completed === undefined ? undefined : completed ? sql`now()` : null,
     })
     .where(owned(userId, id))
-    .returning(dayTask);
-  return task ?? null;
+    .returning(taskColumns);
+  return task ? toTask(task) : null;
 }
 
 export async function deleteTask(userId: string, id: string): Promise<boolean> {
@@ -173,6 +312,6 @@ export async function readWeek(
     weekStartsOn: user.weekStartsOn,
     today,
     dates,
-    tasks: await listTasks(userId, { from: dates[0], to: dates[6] }),
+    ...(await listsAndTheirTasks(userId, dates[0], dates[6])),
   };
 }

@@ -5,7 +5,7 @@ import { validCalendarDate } from "../src/calendar";
 import { readWeek } from "../src/planner";
 import { setWeekStart, signOut } from "./actions";
 import { requestTime } from "./clock";
-import { DetectTimeZone, Week } from "./week";
+import { DetectTimeZone, KeepSelectedList, Week } from "./week";
 import styles from "./week.module.css";
 
 const weekStarts = [
@@ -29,50 +29,53 @@ export default async function WeekPage({
   const view = await readWeek(session.user.id, { week }, await requestTime());
   if (!view.timeZone) return <DetectTimeZone />;
   return (
-    <Week
-      key={`${view.dates[0]} ${view.today}`}
-      today={view.today}
-      dates={view.dates}
-      weekStartsOn={view.weekStartsOn}
-      tasks={view.tasks}
-      menu={
-        <>
-          <button
-            className={`${styles.tool} ${styles.menuButton}`}
-            aria-label="Menu"
-            popoverTarget="menu"
-            type="button"
-          >
-            ⋯
-          </button>
-          <div className={styles.menu} id="menu" popover="auto">
-            <p className={styles.account}>{session.user.email}</p>
-            <form
-              action={setWeekStart}
-              role="group"
-              aria-labelledby="week-starts-on"
+    <KeepSelectedList>
+      <Week
+        key={`${view.dates[0]} ${view.today}`}
+        today={view.today}
+        dates={view.dates}
+        weekStartsOn={view.weekStartsOn}
+        lists={view.lists}
+        tasks={view.tasks}
+        menu={
+          <>
+            <button
+              className={`${styles.tool} ${styles.menuButton}`}
+              aria-label="Menu"
+              popoverTarget="menu"
+              type="button"
             >
-              <p className={styles.menuLabel} id="week-starts-on">
-                Week starts on
-              </p>
-              {weekStarts.map(({ value, label }) => (
-                <button
-                  key={value}
-                  className={styles.menuItem}
-                  name="weekStartsOn"
-                  value={value}
-                  aria-pressed={view.weekStartsOn === value}
-                >
-                  {label}
-                </button>
-              ))}
-            </form>
-            <form action={signOut}>
-              <button className={styles.menuItem}>Sign out</button>
-            </form>
-          </div>
-        </>
-      }
-    />
+              ⋯
+            </button>
+            <div className={styles.menu} id="menu" popover="auto">
+              <p className={styles.account}>{session.user.email}</p>
+              <form
+                action={setWeekStart}
+                role="group"
+                aria-labelledby="week-starts-on"
+              >
+                <p className={styles.menuLabel} id="week-starts-on">
+                  Week starts on
+                </p>
+                {weekStarts.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    className={styles.menuItem}
+                    name="weekStartsOn"
+                    value={value}
+                    aria-pressed={view.weekStartsOn === value}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </form>
+              <form action={signOut}>
+                <button className={styles.menuItem}>Sign out</button>
+              </form>
+            </div>
+          </>
+        }
+      />
+    </KeepSelectedList>
   );
 }

@@ -2,10 +2,14 @@ import { afterAll, expect, test } from "vitest";
 import { db } from "./db/client";
 import { tasks, users } from "./db/schema";
 import {
+  createList,
   createTask,
+  deleteList,
   deleteTask,
   listTasks,
+  moveList,
   readWeek,
+  renameList,
   updateSettings,
   updateTask,
 } from "./planner";
@@ -96,6 +100,7 @@ test("an edit that changes nothing is rejected as invalid", async () => {
 
 test("a task is placed on exactly one of a date or a list", async () => {
   const userId = await newUser();
+  const list = await createList(userId, { title: "Inbox" });
   const task = { userId, title: "Nowhere", position: 0 };
   await expect(
     db.insert(tasks).values({ ...task, id: crypto.randomUUID() }),
@@ -105,7 +110,7 @@ test("a task is placed on exactly one of a date or a list", async () => {
       ...task,
       id: crypto.randomUUID(),
       date: "2026-11-13",
-      listId: "inbox",
+      listId: list.id,
     }),
   ).rejects.toThrow();
 });
@@ -181,4 +186,91 @@ test("an unknown time zone is rejected", async () => {
   await expect(
     updateSettings(user, { timeZone: "Mars/Olympus" }),
   ).rejects.toThrow();
+});
+
+test("a user writes tasks into a list and finds the list with its tasks in order beside the week", async () => {
+  const user = await newUser();
+  const errands = await createList(user, { title: "Errands" });
+  const reading = await createList(user, { title: "Reading" });
+  const milk = await createTask(user, { title: "Milk", listId: errands.id });
+  await createTask(user, { title: "Dune", listId: reading.id });
+  await createTask(user, { title: "Bread", listId: errands.id });
+
+  const view = await readWeek(user, {}, new Date("2026-11-14T10:00:00Z"));
+  expect(view.lists).toEqual([
+    { id: errands.id, title: "Errands" },
+    { id: reading.id, title: "Reading" },
+  ]);
+  expect(
+    view.tasks
+      .filter((task) => task.listId === errands.id)
+      .map((task) => task.title),
+  ).toEqual(["Milk", "Bread"]);
+  expect(milk).toEqual({
+    id: milk.id,
+    title: "Milk",
+    listId: errands.id,
+    completed: false,
+  });
+});
+
+test("a user renames lists and moves them to another place in the order", async () => {
+  const user = await newUser();
+  const titles = async () =>
+    (await readWeek(user, {}, new Date())).lists.map((list) => list.title);
+  const first = await createList(user, { title: "A" });
+  const second = await createList(user, { title: "B" });
+  const third = await createList(user, { title: "C" });
+
+  expect(await renameList(user, second.id, { title: " Errands " })).toEqual({
+    id: second.id,
+    title: "Errands",
+  });
+  await expect(renameList(user, second.id, { title: " " })).rejects.toThrow();
+
+  expect(await moveList(user, third.id, { to: 0 })).toBe(true);
+  expect(await titles()).toEqual(["C", "A", "Errands"]);
+  await moveList(user, third.id, { to: 2 });
+  expect(await titles()).toEqual(["A", "Errands", "C"]);
+  await moveList(user, first.id, { to: 1 });
+  expect(await titles()).toEqual(["Errands", "A", "C"]);
+});
+
+test("deleting a list deletes its tasks; the last list stays", async () => {
+  const user = await newUser();
+  const keep = await createList(user, { title: "Keep" });
+  const drop = await createList(user, { title: "Drop" });
+  await createTask(user, { title: "Kept", listId: keep.id });
+  await createTask(user, { title: "Gone", listId: drop.id });
+
+  expect(await deleteList(user, drop.id)).toBe(true);
+  expect(await deleteList(user, keep.id)).toBe(false);
+
+  const view = await readWeek(user, {}, new Date());
+  expect(view.lists).toEqual([{ id: keep.id, title: "Keep" }]);
+  expect(view.tasks.map((task) => task.title)).toEqual(["Kept"]);
+});
+
+test("a user neither sees nor changes another user's lists and cannot write into them", async () => {
+  const alice = await newUser();
+  const bob = await newUser();
+  await createList(bob, { title: "Bob's" });
+  const list = await createList(alice, { title: "Private" });
+  await createList(alice, { title: "Second" });
+  await createTask(alice, { title: "Secret", listId: list.id });
+
+  expect((await readWeek(bob, {}, new Date())).lists).toEqual([
+    expect.objectContaining({ title: "Bob's" }),
+  ]);
+  expect((await readWeek(bob, {}, new Date())).tasks).toEqual([]);
+  expect(await renameList(bob, list.id, { title: "Hacked" })).toBeNull();
+  expect(await moveList(bob, list.id, { to: 0 })).toBe(false);
+  expect(await deleteList(bob, list.id)).toBe(false);
+  await expect(
+    createTask(bob, { title: "Planted", listId: list.id }),
+  ).rejects.toThrow();
+
+  const view = await readWeek(alice, {}, new Date());
+  expect(view.lists.map((list) => list.title)).toEqual(["Private", "Second"]);
+  expect(view.tasks.map((task) => task.title)).toEqual(["Secret"]);
 });
