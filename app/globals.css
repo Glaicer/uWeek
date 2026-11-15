@@ -1,11 +1,13 @@
 :root {
-  --text: #111;
-  --secondary: #a3a3a3;
-  --rule: #e6e6e6;
-  --faint: #cfcfcf;
-  --accent: #4f5bd5;
+  --text: #1d2733;
+  --secondary: #8592a0;
+  --rule: #e3e8ec;
+  --border: #d5dce2;
+  --accent: #0f766e;
+  --accent-soft: #e6f4f2;
+  --desk: #eef1f3;
   --background: #fff;
-  --row: 42px;
+  --row: 38px;
   color-scheme: light;
 }
 

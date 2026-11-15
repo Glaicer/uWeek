@@ -10,17 +10,15 @@ export default async function WeekPage() {
   if (!session) redirect("/sign-in");
   return (
     <Week
-      actions={
+      menu={
         <>
           <button
-            className={styles.round}
+            className={`${styles.tool} ${styles.menuButton}`}
             aria-label="Menu"
             popoverTarget="menu"
             type="button"
           >
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <path d="M4 6h12M4 10h12M4 14h12" />
-            </svg>
+            ⋯
           </button>
           <div className={styles.menu} id="menu" popover="auto">
             <p className={styles.account}>{session.user.email}</p>
