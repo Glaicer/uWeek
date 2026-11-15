@@ -24,7 +24,7 @@ Icons are Boxicons from https://icon-sets.iconify.design/boxicons: copy the SVG 
 
 ### CSS anchors
 
-CSS Modules rename dashed idents, so an `anchor-name` set inline (`style={{ anchorName }}`) never matches a `position-anchor` written in a `.module.css`: set both on the same side (see `Dropdown` and the list menu in `app/week.tsx`).
+CSS Modules rename dashed idents, so an `anchor-name` set inline (`style={{ anchorName }}`) never matches a `position-anchor` written in a `.module.css`: set both on the same side (see `Dropdown` in `app/week.tsx`).
 
 <!-- BEGIN:nextjs-agent-rules -->
 
