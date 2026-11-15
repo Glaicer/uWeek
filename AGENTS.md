@@ -18,6 +18,10 @@ Single-context: root `GLOSSARY.md` and `docs/adr/`. Before exploring domain conc
 
 Before choosing a library or tool for a task, read `docs/tech-stack.md`: accepted defaults (zustand 5.0.15, zod 4.6.7), the approved `yourweek-cloud` stack (drizzle + pg, better-auth, resend, MCP server v2, zod-openapi, rate-limiter-flexible, vitest) with the ticket that installs each package, the explicit "not adopted" list with reasons, and the rules for adding any new dependency (resolve the current stable from the registry, pin the exact version, respect the spec's "no dependency unless used now" constraint). New dependencies are installed only with the owner's approval.
 
+### Icons
+
+Icons are Boxicons from https://icon-sets.iconify.design/boxicons: copy the SVG inline as a small component with `aria-hidden="true"`, `fill="currentColor"` and `1em` size (see `EditIcon` and `CalendarIcon` in `app/week.tsx`); no icon package.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
