@@ -21,14 +21,14 @@
 ```sh
 pnpm install --frozen-lockfile
 cp .env.example .env       # заполнить BETTER_AUTH_SECRET; для локальной почты раскомментировать MAIL_OUTBOX_DIR
-docker compose up -d --wait  # Postgres 18 на 127.0.0.1:5433, базы yourweek и yourweek_test
-pnpm db:migrate
 pnpm dev                   # http://127.0.0.1:4200
 ```
 
+`pnpm dev` сам поднимает Postgres 18 (`docker compose up -d --wait`, 127.0.0.1:5433, базы `yourweek` и `yourweek_test`) и применяет миграции; `pnpm test` и `pnpm test:e2e` тоже поднимают Postgres сами.
+
 С `MAIL_OUTBOX_DIR=.outbox` ссылка для входа лежит в последнем файле `.outbox/*.json`.
 
-Изменили `src/db/schema.ts` — сгенерируйте миграцию `pnpm db:generate` и примените `pnpm db:migrate`.
+Изменили `src/db/schema.ts` — сгенерируйте миграцию `pnpm db:generate`; применится при следующем `pnpm dev` (или сразу: `pnpm db:migrate`).
 
 ## Проверки
 
@@ -41,9 +41,9 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-`pnpm test` — интеграционные тесты vitest (`src/**/*.test.ts`) на базе `yourweek_test`: перед запуском применяются миграции.
+`pnpm test` — интеграционные тесты vitest (`src/**/*.test.ts`) на базе `yourweek_test`, миграции применяются перед запуском.
 
-`pnpm test:e2e` тоже требует запущенного `docker compose`: Playwright применяет миграции к базе `yourweek_test` и поднимает собственный `next dev` на порту 4172 с отдельной папкой сборки `.next-e2e`, поэтому не мешает уже запущенному `pnpm dev`. Письма перехватываются через `MAIL_OUTBOX_DIR=test-results/outbox`.
+`pnpm test:e2e`: Playwright применяет миграции к базе `yourweek_test` и поднимает собственный `next dev` на порту 4172 с отдельной папкой сборки `.next-e2e`, поэтому не мешает уже запущенному `pnpm dev`. Письма перехватываются через `MAIL_OUTBOX_DIR=test-results/outbox`.
 
 ## Лицензия
 

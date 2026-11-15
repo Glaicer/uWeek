@@ -30,6 +30,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ### Tests
 
-`pnpm test:e2e` needs `docker compose up -d` (database `yourweek_test`). Playwright starts its own `next dev` with `NEXT_DIST_DIR=.next-e2e` so it can run beside the owner's `pnpm dev` (Next allows one dev server per dist dir); keep the `.next-e2e` entries in `tsconfig.json`, or every test run rewrites the file. Sign-in emails land in `test-results/outbox` via `MAIL_OUTBOX_DIR`.
+`pnpm dev`, `pnpm test` and `pnpm test:e2e` start Postgres themselves (`pnpm db:up`); `pnpm dev` also migrates the dev database `yourweek`, while tests migrate only `yourweek_test`. Playwright starts its own `next dev` with `NEXT_DIST_DIR=.next-e2e` so it can run beside the owner's `pnpm dev` (Next allows one dev server per dist dir); keep the `.next-e2e` entries in `tsconfig.json`, or every test run rewrites the file. Sign-in emails land in `test-results/outbox` via `MAIL_OUTBOX_DIR`.
 
-`pnpm test` (vitest) runs integration tests from `src/**/*.test.ts` against `yourweek_test`, also needing `docker compose up -d`. Keep them out of `tests/`: that is Playwright's `testDir`, and it would pick up any `*.test.ts` there.
+`pnpm test` (vitest) runs integration tests from `src/**/*.test.ts` against `yourweek_test`. Keep them out of `tests/`: that is Playwright's `testDir`, and it would pick up any `*.test.ts` there.
