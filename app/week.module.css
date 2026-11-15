@@ -562,6 +562,15 @@ a.calendarRow:not([aria-current="true"]):focus {
   opacity: 1;
 }
 
+.managing {
+  gap: 6px;
+}
+
+.managing .tab[aria-selected="true"] {
+  background: none;
+  color: var(--text);
+}
+
 .listTool {
   display: grid;
   flex: none;
