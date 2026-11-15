@@ -179,10 +179,21 @@
   padding-top: 8px;
 }
 
-/* why: shadows thicken today's lines without changing its height, so facing bands stay level */
+/* why: today's 2px edges are drawn by a shadow and an overlay of the next band's rule, so the band keeps the height of the band facing it */
 .today {
+  position: relative;
   border-top-color: var(--accent);
   box-shadow: inset 0 1px 0 var(--accent);
+}
+
+.today::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
 }
 
 .today .number {
@@ -192,11 +203,6 @@
 
 .today .weekday {
   color: var(--accent);
-}
-
-.today .row {
-  border-bottom-color: var(--accent);
-  box-shadow: inset 0 -1px 0 var(--accent);
 }
 
 .row {
