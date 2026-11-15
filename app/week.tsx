@@ -165,7 +165,7 @@ function NewTask({
     if (!text || !reopen) onClose();
   }
   return (
-    <div className={`${styles.row} ${styles.newTask}`}>
+    <div className={styles.row}>
       <TitleInput
         label="New task"
         value={title}
@@ -188,7 +188,6 @@ function DraftRow({
 }) {
   return (
     <div className={`${styles.row} ${styles.draft}`}>
-      <span className={styles.check} />
       <span className={styles.name}>{draft.title}</span>
       {draft.failed && (
         <span className={styles.error} role="alert">
@@ -204,7 +203,7 @@ function DraftRow({
       )}
       {draft.failed && (
         <button
-          className={styles.delete}
+          className={styles.action}
           type="button"
           aria-label={`Discard ${draft.title}`}
           onClick={() => onDiscard(draft)}
@@ -213,6 +212,17 @@ function DraftRow({
         </button>
       )}
     </div>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M3.38 15.95c-.13.13-.22.29-.26.46l-1.08 4.34c-.09.34.01.7.26.95c.19.19.45.29.71.29c.08 0 .16 0 .24-.03l4.34-1.09c.18-.04.34-.13.46-.26L18.2 10.46l-4.67-4.67zM19.67 2.61c-.81-.81-2.14-.81-2.95 0l-1.78 1.78l4.67 4.67l1.78-1.78c.81-.81.81-2.13 0-2.95z"
+      />
+    </svg>
   );
 }
 
@@ -242,23 +252,17 @@ function TaskRow({
     <div
       className={`${styles.row} ${styles.task} ${completed ? styles.done : ""}`}
     >
-      <input
-        className={styles.check}
-        type="checkbox"
-        aria-label={task.title}
-        checked={completed}
-        onChange={() =>
-          startTransition(async () => {
-            setCompleted(!completed);
-            await change({ completed: !completed });
-          })
-        }
-      />
       {renamed === null ? (
         <button
           className={styles.name}
           type="button"
-          onClick={() => setRenamed(task.title)}
+          aria-pressed={completed}
+          onClick={() =>
+            startTransition(async () => {
+              setCompleted(!completed);
+              await change({ completed: !completed });
+            })
+          }
         >
           {task.title}
         </button>
@@ -273,7 +277,15 @@ function TaskRow({
       )}
       {alert}
       <button
-        className={styles.delete}
+        className={styles.action}
+        type="button"
+        aria-label={`Edit ${task.title}`}
+        onClick={() => setRenamed(task.title)}
+      >
+        <EditIcon />
+      </button>
+      <button
+        className={styles.action}
         type="button"
         aria-label={`Delete ${task.title}`}
         onClick={() =>

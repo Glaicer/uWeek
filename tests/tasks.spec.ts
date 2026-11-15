@@ -1,8 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { signIn } from "./mail";
 
 const day = (page: Page, name: string) =>
   page.getByRole("region", { name, exact: true });
+const task = (day: Locator, name: string) =>
+  day.getByRole("button", { name, exact: true });
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -32,12 +34,13 @@ test("a user writes tasks into empty rows, completes, renames and deletes them, 
   await friday.getByRole("textbox", { name: "New task" }).press("Escape");
   await expect(friday.getByRole("textbox")).toHaveCount(0);
 
-  await friday.getByRole("checkbox", { name: "Buy milk" }).check();
-  await expect(
-    friday.getByRole("checkbox", { name: "Buy milk" }),
-  ).toBeChecked();
+  await task(friday, "Buy milk").click();
+  await expect(task(friday, "Buy milk")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
-  await friday.getByRole("button", { name: "Call mum", exact: true }).click();
+  await friday.getByRole("button", { name: "Edit Call mum" }).click();
   const rename = friday.getByRole("textbox", { name: "Task title" });
   await rename.fill("Call dad");
   await rename.press("Enter");
@@ -45,22 +48,33 @@ test("a user writes tasks into empty rows, completes, renames and deletes them, 
 
   await friday.getByRole("button", { name: "Delete Water plants" }).click();
 
-  const expected = ["Buy milk", "Call dad"];
-  for (const check of [false, true]) {
-    if (check) await page.reload();
-    const boxes = friday.getByRole("checkbox");
-    await expect(boxes).toHaveCount(expected.length);
-    for (const [index, name] of expected.entries())
-      await expect(boxes.nth(index)).toHaveAccessibleName(name);
-    await expect(boxes.nth(0)).toBeChecked();
-    await expect(boxes.nth(1)).not.toBeChecked();
+  for (const reload of [false, true]) {
+    if (reload) await page.reload();
+    await expect(
+      friday.getByRole("button", {
+        name: /^(Buy milk|Call dad|Water plants|Call mum)$/,
+      }),
+    ).toHaveText(["Buy milk", "Call dad"]);
+    await expect(task(friday, "Buy milk")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(task(friday, "Call dad")).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   }
 
-  await friday.getByRole("checkbox", { name: "Buy milk" }).uncheck();
+  await task(friday, "Buy milk").click();
+  await expect(task(friday, "Buy milk")).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
   await page.reload();
-  await expect(
-    friday.getByRole("checkbox", { name: "Buy milk" }),
-  ).not.toBeChecked();
+  await expect(task(friday, "Buy milk")).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
 });
 
 test("facing days grow together and always keep an empty row under the last task", async ({
@@ -75,7 +89,7 @@ test("facing days grow together and always keep an empty row under the last task
   for (const title of ["One", "Two", "Three", "Four", "Five"]) {
     await input.fill(title);
     await input.press("Enter");
-    await expect(friday.getByRole("checkbox", { name: title })).toBeVisible();
+    await expect(task(friday, title)).toBeVisible();
   }
   await input.press("Escape");
 
@@ -117,8 +131,6 @@ test("a failed save is shown at the row and keeps the typed text", async ({
 
   await page.unroute(actions);
   await alert.getByRole("button", { name: "Try again" }).click();
-  await expect(
-    friday.getByRole("checkbox", { name: "Buy milk" }),
-  ).toBeVisible();
+  await expect(task(friday, "Buy milk")).toBeVisible();
   await expect(friday.getByRole("alert")).toHaveCount(0);
 });

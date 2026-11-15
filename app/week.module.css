@@ -230,27 +230,10 @@
 }
 
 .empty:focus-visible,
-.check:focus-visible,
 .name:focus-visible,
-.delete:focus-visible {
+.action:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-
-.check {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  border: 1.5px solid var(--check);
-  border-radius: 4px;
-  appearance: none;
-  cursor: pointer;
-}
-
-.check:checked {
-  border-color: var(--accent);
-  background: var(--accent);
 }
 
 .name {
@@ -265,7 +248,7 @@
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: text;
+  cursor: pointer;
 }
 
 .done .name {
@@ -282,10 +265,6 @@
   color: inherit;
   font: inherit;
   outline: none;
-}
-
-.newTask {
-  padding-left: 36px;
 }
 
 .draft .name {
@@ -308,7 +287,8 @@
   font-size: 12px;
 }
 
-.delete {
+.action {
+  display: flex;
   flex: none;
   padding: 0 2px;
   border: 0;
@@ -321,13 +301,19 @@
   cursor: pointer;
 }
 
-.task:hover .delete,
-.task:focus-within .delete {
+.action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.draft .action,
+.task:hover .action,
+.task:focus-within .action {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .delete {
+  .action {
     opacity: 0.6;
   }
 }
