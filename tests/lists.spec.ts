@@ -6,12 +6,13 @@ const someday = (page: Page) =>
   page.getByRole("region", { name: "Someday", exact: true });
 const tab = (page: Page, name: string) =>
   someday(page).getByRole("tab", { name, exact: true });
-const menuItem = (page: Page, name: string) =>
-  page.getByRole("menuitem", { name, exact: true });
 
-async function openMenu(page: Page, list: string) {
-  await tab(page, list).click({ button: "right" });
-  await expect(page.getByRole("menu")).toBeVisible();
+async function newList(page: Page, name: string) {
+  await someday(page).getByRole("button", { name: "New list" }).click();
+  const input = someday(page).getByRole("textbox", { name: "New list" });
+  await input.fill(name);
+  await input.press("Enter");
+  await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
 }
 
 async function addTasks(page: Page, titles: string[]) {
@@ -33,49 +34,41 @@ test.beforeEach(async ({ page }) => {
   await signIn(page);
 });
 
-test("a user creates, renames, orders and deletes lists, writes tasks into them, and finds it all after a reload", async ({
+test("a user creates, renames and deletes lists, writes tasks into them, and finds it all after a reload", async ({
   page,
 }) => {
   const tabs = someday(page).getByRole("tab");
+  const button = (name: string) =>
+    someday(page).getByRole("button", { name, exact: true });
   await expect(tabs).toHaveText(["Inbox"]);
   await expect(tab(page, "Inbox")).toHaveAttribute("aria-selected", "true");
 
   await addTasks(page, ["Buy a lamp", "Read Dune"]);
-
-  await tab(page, "Inbox").click();
-  await menuItem(page, "New list").click();
-  const name = someday(page).getByRole("textbox", { name: "New list" });
-  await name.fill("Errands");
-  await name.press("Enter");
-  await expect(tab(page, "Errands")).toHaveAttribute("aria-selected", "true");
-  await expect(
-    someday(page).getByRole("button", { name: "Buy a lamp" }),
-  ).toHaveCount(0);
+  await newList(page, "Errands");
+  await expect(button("Buy a lamp")).toHaveCount(0);
   await addTasks(page, ["Post office"]);
+  await newList(page, "Trips");
 
-  await openMenu(page, "Inbox");
-  await menuItem(page, "New list").click();
-  await name.fill("Trips");
-  await name.press("Enter");
+  await expect(button("Rename Errands")).toHaveCount(0);
+  const manage = button("Edit lists");
+  await manage.click();
+  await expect(manage).toHaveAttribute("aria-pressed", "true");
 
-  await openMenu(page, "Errands");
-  await menuItem(page, "Rename").click();
+  await button("Rename Errands").click();
   const rename = someday(page).getByRole("textbox", { name: "List name" });
   await expect(rename).toHaveValue("Errands");
   await rename.fill("Chores");
   await rename.press("Enter");
+  await expect(tabs).toHaveText(["Inbox", "Chores", "Trips"]);
 
-  await openMenu(page, "Trips");
-  await expect(menuItem(page, "Move down")).toBeDisabled();
-  await menuItem(page, "Move up").click();
-  await expect(tabs).toHaveText(["Inbox", "Trips", "Chores"]);
-
-  await openMenu(page, "Trips");
-  await menuItem(page, "Delete").click();
+  await button("Delete Trips").click();
+  await page
+    .getByRole("dialog", { name: "Delete “Trips”?" })
+    .getByRole("button", { name: "Delete" })
+    .click();
   await expect(tabs).toHaveText(["Inbox", "Chores"]);
 
-  await openMenu(page, "Chores");
-  await menuItem(page, "Delete").click();
+  await button("Delete Chores").click();
   const confirm = page.getByRole("dialog", {
     name: "Delete “Chores” and its 1 task?",
   });
@@ -85,31 +78,24 @@ test("a user creates, renames, orders and deletes lists, writes tasks into them,
   for (const reload of [false, true]) {
     if (reload) await page.reload();
     await expect(tabs).toHaveText(["Inbox", "Chores"]);
-    if (!reload) await tab(page, "Inbox").click();
-    await expect(tab(page, "Inbox")).toHaveAttribute("aria-selected", "true");
+    await tab(page, "Inbox").click();
     await expect(
       someday(page).getByRole("button", { name: /^(Buy a lamp|Read Dune)$/ }),
     ).toHaveText(["Buy a lamp", "Read Dune"]);
     await tab(page, "Chores").click();
-    await expect(
-      someday(page).getByRole("button", { name: "Post office", exact: true }),
-    ).toBeVisible();
+    await expect(button("Post office")).toBeVisible();
   }
 
-  await openMenu(page, "Chores");
-  await menuItem(page, "Delete").click();
+  await manage.click();
+  await button("Delete Chores").click();
   await confirm.getByRole("button", { name: "Delete" }).click();
   await expect(tabs).toHaveText(["Inbox"]);
-
-  await openMenu(page, "Inbox");
-  await expect(menuItem(page, "Delete")).toBeDisabled();
-  await page.keyboard.press("Escape");
+  await expect(tab(page, "Inbox")).toHaveAttribute("aria-selected", "true");
+  await expect(button("Delete Inbox")).toHaveCount(0);
 
   await page.reload();
   await expect(tabs).toHaveText(["Inbox"]);
-  await expect(
-    someday(page).getByRole("button", { name: "Post office" }),
-  ).toHaveCount(0);
+  await expect(button("Post office")).toHaveCount(0);
 });
 
 test("the list's tasks complete, rename and delete like a day's", async ({
@@ -144,15 +130,7 @@ test("many lists keep the Someday band level with the day facing it, and the pic
 }) => {
   const thursday = page.getByRole("region", { name: "12 Thu", exact: true });
   const names = ["Two", "Three", "Four", "Five", "Six", "Seven", "Eight"];
-  for (const name of names) {
-    await someday(page).getByRole("tab", { selected: true }).click();
-    await menuItem(page, "New list").click();
-    await someday(page).getByRole("textbox", { name: "New list" }).fill(name);
-    await someday(page)
-      .getByRole("textbox", { name: "New list" })
-      .press("Enter");
-    await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
-  }
+  for (const name of names) await newList(page, name);
 
   const band = (await someday(page).boundingBox())!;
   const tabs = (await someday(page).getByRole("tablist").boundingBox())!;

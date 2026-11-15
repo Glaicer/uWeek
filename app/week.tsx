@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { flushSync } from "react-dom";
 import {
   createContext,
   startTransition,
@@ -31,7 +30,6 @@ import {
   createTask,
   deleteList,
   deleteTask,
-  moveList,
   renameList,
   saveTimeZone,
   updateTask,
@@ -742,38 +740,52 @@ export function KeepSelectedList({ children }: { children: ReactNode }) {
   return <SelectedList value={selected}>{children}</SelectedList>;
 }
 
+function CogIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="m21.16 7.86l-1-1.73a1.997 1.997 0 0 0-2.73-.73l-.53.31c-.58-.46-1.22-.83-1.9-1.11V4c0-1.1-.9-2-2-2h-2c-1.1 0-2 .9-2 2v.6c-.67.28-1.31.66-1.9 1.11l-.53-.31c-.96-.55-2.18-.22-2.73.73l-1 1.73c-.55.96-.22 2.18.73 2.73l.5.29c-.05.37-.08.74-.08 1.11s.03.74.08 1.11l-.5.29c-.96.55-1.28 1.78-.73 2.73l1 1.73c.55.95 1.78 1.28 2.73.73l.53-.31c.58.46 1.22.83 1.9 1.11v.6c0 1.1.9 2 2 2h2c1.1 0 2-.9 2-2v-.6a8.7 8.7 0 0 0 1.9-1.11l.53.31c.96.55 2.18.22 2.73-.73l1-1.73c.55-.96.22-2.18-.73-2.73l-.5-.29c.05-.37.08-.74.08-1.11s-.03-.74-.08-1.11l.5-.29c.96-.55 1.28-1.78.73-2.73M12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4s4 1.79 4 4s-1.79 4-4 4"
+      />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="currentColor" d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z" />
+    </svg>
+  );
+}
+
 function ListTabs({
   lists,
   selected,
-  count,
+  countOf,
   onSelect,
   onListsChange,
   onDeleted,
 }: {
   lists: TaskList[];
   selected: TaskList;
-  count: number;
+  countOf: (list: TaskList) => number;
   onSelect: (list: TaskList) => void;
   onListsChange: (lists: TaskList[]) => void;
   onDeleted: (list: TaskList) => void;
 }) {
   const tablist = useRef<HTMLDivElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
   const confirm = useRef<HTMLDialogElement>(null);
-  const [editing, setEditing] = useState<"rename" | "new" | null>(null);
+  const [managing, setManaging] = useState(false);
+  const [editing, setEditing] = useState<TaskList | "new" | null>(null);
+  const [deleting, setDeleting] = useState<TaskList | null>(null);
   const [title, setTitle] = useState("");
   const [refocus, setRefocus] = useState(0);
   const [busy, setBusy] = useState(false);
   const { save, alert } = useSave();
   const refocusTab = () => setRefocus((n) => n + 1);
-
-  async function change(work: () => Promise<void>): Promise<boolean> {
-    setBusy(true);
-    const saved = await save(work);
-    setBusy(false);
-    return saved;
-  }
   const index = lists.indexOf(selected);
+  const count = deleting ? countOf(deleting) : 0;
 
   useEffect(() => {
     if (refocus)
@@ -782,21 +794,16 @@ function ListTabs({
         ?.focus();
   }, [refocus]);
 
-  function openMenu(list: TaskList, buttons = 0) {
-    flushSync(() => onSelect(list));
-    const show = () => menu.current?.showPopover();
-    // why: where the context menu fires on press, releasing the button would light-dismiss a menu opened at once
-    if (buttons & 2)
-      window.addEventListener("pointerup", () => setTimeout(show), {
-        once: true,
-      });
-    else show();
+  async function change(work: () => Promise<void>): Promise<boolean> {
+    setBusy(true);
+    const saved = await save(work);
+    setBusy(false);
+    return saved;
   }
 
-  function startEditing(mode: "rename" | "new") {
-    menu.current?.hidePopover();
-    setTitle(mode === "rename" ? selected.title : "");
-    setEditing(mode);
+  function startEditing(target: TaskList | "new") {
+    setTitle(target === "new" ? "" : target.title);
+    setEditing(target);
   }
 
   function stopEditing() {
@@ -807,38 +814,32 @@ function ListTabs({
   async function submit() {
     if (!editing || busy) return;
     const text = title.trim();
-    if (!text || (editing === "rename" && text === selected.title))
+    if (!text || (editing !== "new" && text === editing.title))
       return stopEditing();
     const saved = await change(async () => {
-      if (editing === "rename") {
-        const list = await renameList(selected.id, text);
-        onListsChange(lists.map((l) => (l.id === list.id ? list : l)));
-      } else {
+      if (editing === "new") {
         const list = await createList(text);
         onListsChange([...lists, list]);
         onSelect(list);
+      } else {
+        const list = await renameList(editing.id, text);
+        onListsChange(lists.map((l) => (l.id === list.id ? list : l)));
       }
     });
     if (saved) stopEditing();
   }
 
-  async function move(step: number) {
-    menu.current?.hidePopover();
-    const to = index + step;
-    await change(async () => {
-      await moveList(selected.id, to);
-      const order = lists.filter((list) => list !== selected);
-      order.splice(to, 0, selected);
-      onListsChange(order);
-    });
-    refocusTab();
+  function askToDelete(list: TaskList) {
+    setDeleting(list);
+    confirm.current?.showModal();
   }
 
   async function remove() {
     confirm.current?.close();
+    if (!deleting) return;
     await change(async () => {
-      await deleteList(selected.id);
-      onDeleted(selected);
+      await deleteList(deleting.id);
+      onDeleted(deleting);
     });
     refocusTab();
   }
@@ -850,19 +851,6 @@ function ListTabs({
     const next = lists[Math.min(Math.max(index + step, 0), lists.length - 1)];
     onSelect(next);
     document.getElementById(tabId(next))?.focus();
-  }
-
-  function onMenuKeyDown(event: KeyboardEvent) {
-    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
-    if (!step) return;
-    event.preventDefault();
-    const items = Array.from(
-      menu.current?.querySelectorAll<HTMLElement>(
-        '[role="menuitem"]:not(:disabled)',
-      ) ?? [],
-    );
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    items[(at + step + items.length) % items.length]?.focus();
   }
 
   const input = (label: string) => (
@@ -880,110 +868,80 @@ function ListTabs({
   return (
     <div className={styles.tabBar}>
       <div
-        className={styles.tabs}
+        className={`${styles.tabs} ${managing ? styles.managing : ""}`}
         ref={tablist}
         role="tablist"
         aria-label="Lists"
       >
         {lists.map((list) =>
-          editing === "rename" && list === selected ? (
+          editing === list ? (
             input("List name")
           ) : (
-            <button
-              key={list.id}
-              className={styles.tab}
-              id={tabId(list)}
-              style={list === selected ? { anchorName: "--list-menu" } : {}}
-              type="button"
-              role="tab"
-              title={list.title}
-              aria-selected={list === selected}
-              aria-haspopup={list === selected ? "menu" : undefined}
-              tabIndex={list === selected ? 0 : -1}
-              disabled={busy}
-              onClick={() =>
-                list === selected ? openMenu(list) : onSelect(list)
-              }
-              onContextMenu={(event) => {
-                event.preventDefault();
-                openMenu(list, event.buttons);
-              }}
-              onKeyDown={onTabKeyDown}
-            >
-              {list.title}
-            </button>
+            <span key={list.id} className={styles.tabItem} role="presentation">
+              <button
+                className={styles.tab}
+                id={tabId(list)}
+                type="button"
+                role="tab"
+                title={list.title}
+                aria-selected={list === selected}
+                tabIndex={list === selected ? 0 : -1}
+                disabled={busy}
+                onClick={() => onSelect(list)}
+                onKeyDown={onTabKeyDown}
+              >
+                {list.title}
+              </button>
+              {managing && (
+                <>
+                  <button
+                    className={styles.action}
+                    type="button"
+                    aria-label={`Rename ${list.title}`}
+                    disabled={busy}
+                    onClick={() => startEditing(list)}
+                  >
+                    <EditIcon />
+                  </button>
+                  {lists.length > 1 && (
+                    <button
+                      className={`${styles.action} ${styles.remove}`}
+                      type="button"
+                      aria-label={`Delete ${list.title}`}
+                      disabled={busy}
+                      onClick={() => askToDelete(list)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </>
+              )}
+            </span>
           ),
         )}
         {editing === "new" && input("New list")}
       </div>
-      {alert}
-      <div
-        className={`${styles.menu} ${styles.listMenu}`}
-        style={{ positionAnchor: "--list-menu" }}
-        ref={menu}
-        id="list-menu"
-        popover="auto"
-        role="menu"
-        aria-label={`${selected.title} list`}
-        onKeyDown={onMenuKeyDown}
-        onToggle={(event) => {
-          if (event.newState === "open")
-            event.currentTarget
-              .querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)')
-              ?.focus();
-        }}
+      <button
+        className={styles.listTool}
+        type="button"
+        aria-label="New list"
+        title="New list"
+        disabled={busy}
+        onClick={() => startEditing("new")}
       >
-        <button
-          className={styles.menuItem}
-          role="menuitem"
-          type="button"
-          onClick={() => startEditing("rename")}
-        >
-          Rename
-        </button>
-        <button
-          className={styles.menuItem}
-          role="menuitem"
-          type="button"
-          disabled={index === 0}
-          onClick={() => move(-1)}
-        >
-          Move up
-        </button>
-        <button
-          className={styles.menuItem}
-          role="menuitem"
-          type="button"
-          disabled={index === lists.length - 1}
-          onClick={() => move(1)}
-        >
-          Move down
-        </button>
-        <button
-          className={styles.menuItem}
-          role="menuitem"
-          type="button"
-          onClick={() => startEditing("new")}
-        >
-          New list
-        </button>
-        <button
-          className={`${styles.menuItem} ${styles.danger}`}
-          role="menuitem"
-          type="button"
-          disabled={lists.length === 1}
-          title={
-            lists.length === 1 ? "The only list can't be deleted" : undefined
-          }
-          onClick={() => {
-            menu.current?.hidePopover();
-            if (count) confirm.current?.showModal();
-            else remove();
-          }}
-        >
-          Delete
-        </button>
-      </div>
+        <PlusIcon />
+      </button>
+      {alert}
+      <button
+        className={`${styles.listTool} ${styles.manage}`}
+        type="button"
+        aria-label="Edit lists"
+        title="Edit lists"
+        aria-pressed={managing}
+        onClick={() => setManaging(!managing)}
+      >
+        <CogIcon />
+      </button>
       <dialog
         className={styles.confirm}
         ref={confirm}
@@ -991,8 +949,8 @@ function ListTabs({
         onClose={refocusTab}
       >
         <p id="delete-list">
-          Delete “{selected.title}” and its {count}{" "}
-          {count === 1 ? "task" : "tasks"}?
+          Delete “{deleting?.title}”
+          {count > 0 && ` and its ${count} ${count === 1 ? "task" : "tasks"}`}?
         </p>
         <div className={styles.confirmActions}>
           <button
@@ -1069,9 +1027,8 @@ export function Week({
   const counts = byPlace.map(
     (place, index) => place.length + draftsByPlace[index].length,
   );
-  const listCount = counts[7];
   // why: the tab bar takes the Someday band's first row
-  counts[7] = listCount + 1;
+  counts[7] += 1;
   // why: band i faces band i+4 across the spine (Mon↔Fri … Thu↔Someday, or Sun↔Thu … Wed↔Someday) and keeps the same rows so the rules line up
   const rows = counts.map((count, band) =>
     Math.max(minRows, Math.max(count, counts[(band + 4) % 8]) + 1),
@@ -1147,7 +1104,8 @@ export function Week({
     const rest = lists.filter((l) => l !== list);
     setLists(rest);
     setTasks((tasks) => tasks.filter((task) => task.listId !== list.id));
-    setSelectedId(rest[Math.max(lists.indexOf(list) - 1, 0)].id);
+    if (list === selected)
+      setSelectedId(rest[Math.max(lists.indexOf(list) - 1, 0)].id);
   }
 
   return (
@@ -1222,7 +1180,11 @@ export function Week({
             <ListTabs
               lists={lists}
               selected={selected}
-              count={listCount}
+              countOf={(list) =>
+                tasks.filter((task) => task.listId === list.id).length +
+                drafts.filter((draft) => draft.placement.listId === list.id)
+                  .length
+              }
               onSelect={(list) => setSelectedId(list.id)}
               onListsChange={setLists}
               onDeleted={deleted}
