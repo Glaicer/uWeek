@@ -95,16 +95,19 @@ describe("weekOf", () => {
 });
 
 describe("weekNumber", () => {
-  test("is the ISO week of the week's Thursday", () => {
+  test("a Monday week is the ISO week of its Thursday", () => {
     expect(weekNumber(weekOf("2026-11-14", 1))).toBe(46);
     expect(weekNumber(weekOf("2027-01-01", 1))).toBe(53);
     expect(weekNumber(weekOf("2027-01-04", 1))).toBe(1);
   });
 
-  test("a Sunday week is numbered by its own Thursday", () => {
+  test("a Sunday week counts from the week that holds 1 January", () => {
     expect(weekNumber(weekOf("2026-11-14", 0))).toBe(46);
     expect(weekNumber(weekOf("2026-11-15", 0))).toBe(47);
-    expect(weekNumber(weekOf("2026-12-27", 0))).toBe(53);
+    expect(weekNumber(weekOf("2026-12-27", 0))).toBe(1);
+    expect(weekNumber(weekOf("2027-01-03", 0))).toBe(2);
+    expect(weekNumber(weekOf("2022-12-31", 0))).toBe(53);
+    expect(weekNumber(weekOf("2023-01-01", 0))).toBe(1);
   });
 });
 

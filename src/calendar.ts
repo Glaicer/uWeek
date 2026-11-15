@@ -51,9 +51,17 @@ export function monthWeeks(
   return weeks;
 }
 
+// why: Monday weeks follow ISO 8601; Sunday weeks follow the US rule, where the week holding 1 January is week 1
 export function weekNumber(week: string[]): number {
-  return isoWeek(
-    localDate(week.find((day) => utcDate(day).getUTCDay() === 4)!),
+  if (utcDate(week[0]).getUTCDay() !== 0)
+    return isoWeek(
+      localDate(week.find((day) => utcDate(day).getUTCDay() === 4)!),
+    );
+  const firstWeek = weekOf(`${week[6].slice(0, 4)}-01-01`, 0)[0];
+  return (
+    (utcDate(week[0]).getTime() - utcDate(firstWeek).getTime()) /
+      (7 * 86_400_000) +
+    1
   );
 }
 
