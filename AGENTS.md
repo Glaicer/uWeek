@@ -22,11 +22,11 @@ Before choosing a library or tool for a task, read `docs/tech-stack.md`: accepte
 
 Icons are Boxicons from https://icon-sets.iconify.design/boxicons: copy the SVG inline as a small component with `aria-hidden="true"`, `fill="currentColor"` and `1em` size (see `EditIcon` and `CalendarIcon` in `app/week.tsx`); no icon package.
 
-<!-- BEGIN:nextjs-agent-rules -->
-
 ### CSS anchors
 
 CSS Modules rename dashed idents, so an `anchor-name` set inline (`style={{ anchorName }}`) never matches a `position-anchor` written in a `.module.css`: set both on the same side (see `Dropdown` and the list menu in `app/week.tsx`).
+
+<!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
 
