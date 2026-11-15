@@ -26,6 +26,7 @@
     "src",
     "app",
     "drizzle.config.ts",
+    "vitest.config.ts",
     "tests",
     "playwright.config.ts",
     ".next/types/**/*.ts",

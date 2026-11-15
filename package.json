@@ -16,6 +16,7 @@
     "typecheck": "NEXT_TELEMETRY_DISABLED=1 next typegen && tsc --noEmit",
     "lint": "eslint .",
     "format:check": "prettier --check src app tests *.json *.ts *.mjs README.md",
+    "test": "vitest run",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
@@ -32,7 +33,9 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.9",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.0"
+    "typescript-eslint": "8.71.0",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
   },
   "dependencies": {
     "better-auth": "1.7.23",
@@ -42,6 +45,7 @@
     "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "resend": "6.38.1"
+    "resend": "6.38.1",
+    "zod": "4.6.7"
   }
 }

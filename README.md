@@ -36,11 +36,14 @@ pnpm dev                   # http://127.0.0.1:4200
 pnpm typecheck
 pnpm lint
 pnpm format:check
+pnpm test
 pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-`pnpm test:e2e` требует запущенного `docker compose`: Playwright применяет миграции к базе `yourweek_test` и поднимает собственный `next dev` на порту 4172 с отдельной папкой сборки `.next-e2e`, поэтому не мешает уже запущенному `pnpm dev`. Письма перехватываются через `MAIL_OUTBOX_DIR=test-results/outbox`.
+`pnpm test` — интеграционные тесты vitest (`src/**/*.test.ts`) на базе `yourweek_test`: перед запуском применяются миграции.
+
+`pnpm test:e2e` тоже требует запущенного `docker compose`: Playwright применяет миграции к базе `yourweek_test` и поднимает собственный `next dev` на порту 4172 с отдельной папкой сборки `.next-e2e`, поэтому не мешает уже запущенному `pnpm dev`. Письма перехватываются через `MAIL_OUTBOX_DIR=test-results/outbox`.
 
 ## Лицензия
 

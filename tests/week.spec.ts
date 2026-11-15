@@ -29,12 +29,13 @@ test("the current week is a two-page spread with today highlighted", async ({
   await expect(
     page.getByText("9–15 November 2026", { exact: true }),
   ).toBeVisible();
-  for (const name of ["Previous week", "Today", "Next week", "New task"]) {
+  for (const name of ["Previous week", "Today", "Next week"]) {
     await expect(
       page.getByRole("button", { name, exact: true }),
     ).toBeDisabled();
   }
-  await expect(page.getByRole("button", { name: "Menu" })).toBeEnabled();
+  for (const name of ["Menu", "New task"])
+    await expect(page.getByRole("button", { name })).toBeEnabled();
 
   await expect(page.getByRole("heading", { level: 2 })).toHaveText(bands);
 

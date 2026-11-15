@@ -35,7 +35,7 @@
 | MCP-клиент для тестов | **@modelcontextprotocol/client** (dev) | 2.4.0 | 12 | Apache-2.0, 13 пакетов. Проверяет сервер в процессе и против запущенного сервера. | Context7 `/modelcontextprotocol/typescript-sdk/v2.4.0` (docs/testing) |
 | OpenAPI из zod | **zod-openapi** | 6.0.2 | 11 | MIT, без зависимостей, peer `zod ^4`. OpenAPI 3.1 из тех же схем через `.meta()` zod 4. | Context7 `/samchungy/zod-openapi` (README master) |
 | Лимит частоты запросов | **rate-limiter-flexible** | 11.4.1 | 11 | ISC, без зависимостей. Лимит в памяти на токен хватает для одного контейнера; при нескольких — хранилище Postgres на том же pg Pool без смены API. | Context7 `/animir/node-rate-limiter-flexible` (README master) |
-| Unit-тесты | **vitest** + **vite** (dev) | 5.1.0 / 8.3.8 | 04 | MIT. Только чистые правила (календарь и часовые пояса, серии, перенос, CSV). Понимает импорты без расширений и текущий `tsconfig`; 67 пакетов с vite. Playwright остаётся seam сценариев пользователя. | npm registry (peer `vite ^6.4 \|\| ^7 \|\| ^8`) |
+| Unit- и интеграционные тесты | **vitest** + **vite** (dev) | 5.1.0 / 8.3.8 | 03 | MIT. Чистые правила (календарь и часовые пояса, серии, перенос, CSV) и слой операций на настоящем Postgres (`yourweek_test`). Поставлен в 03 ради первого интеграционного теста (решение владельца 2026-11-15). Понимает импорты без расширений и текущий `tsconfig`; 67 пакетов с vite. Playwright остаётся seam сценариев пользователя. | npm registry (peer `vite ^6.4 \|\| ^7 \|\| ^8`) |
 
 ## Явно не берем
 
@@ -68,4 +68,4 @@
 
 ## Текущий момент
 
-Проект переходит на server-first (`docs/adr/0001-server-first-postgres-better-auth.md`). Стек `yourweek-cloud` утверждён и ставится по тикетам из столбца «Когда»; zustand и zod — в первом тикете, где появляются клиентское состояние и операции слоя. Офлайн-оболочка, IndexedDB и старый интерфейс удалены тикетом 02; из старого кода оставлены только `src/model.ts`, `src/calendar.ts`, `src/csv.ts` и `src/planning.ts`. Открытое решение: drag-and-drop (тикет 07).
+Проект переходит на server-first (`docs/adr/0001-server-first-postgres-better-auth.md`). Стек `yourweek-cloud` утверждён и ставится по тикетам из столбца «Когда»; zod поставлен тикетом 03 (валидация на входе `src/planner.ts`); zustand — в первом тикете, где клиентскому состоянию планера станет тесно в `useState` (тикет 03 обошёлся без него). Офлайн-оболочка, IndexedDB и старый интерфейс удалены тикетом 02; из старого кода оставлены только `src/model.ts`, `src/calendar.ts`, `src/csv.ts` и `src/planning.ts`. Открытое решение: drag-and-drop (тикет 07).

@@ -1,4 +1,14 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  date,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 
 const createdAt = () =>
   timestamp({ withTimezone: true }).defaultNow().notNull();
@@ -68,4 +78,29 @@ export const verifications = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [index().on(table.identifier)],
+);
+
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    date: date({ mode: "string" }),
+    // shortcut: references lists(id) once ticket 05 creates the lists table
+    listId: text(),
+    position: integer().notNull(),
+    completedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index().on(table.userId, table.date),
+    check(
+      "tasks_date_xor_list",
+      sql`(${table.date} is null) <> (${table.listId} is null)`,
+    ),
+  ],
 );
