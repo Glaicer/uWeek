@@ -8,7 +8,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm db:up && pnpm db:migrate && NEXT_TELEMETRY_DISABLED=1 next dev --hostname 127.0.0.1 --port 4200",
+    "dev": "pnpm db:up && NEXT_TELEMETRY_DISABLED=1 next dev --hostname 127.0.0.1 --port 4200",
     "build": "NEXT_TELEMETRY_DISABLED=1 next build",
     "start": "NEXT_TELEMETRY_DISABLED=1 next start --hostname 127.0.0.1 --port 4201",
     "db:up": "docker compose up -d --wait",

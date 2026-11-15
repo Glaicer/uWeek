@@ -19,7 +19,7 @@ export default defineConfig({
   testDir: "./tests",
   use: { baseURL: env.BETTER_AUTH_URL, timezoneId: "Europe/Moscow" },
   webServer: {
-    command: `node src/db/migrate.ts && next dev --hostname 127.0.0.1 --port ${port}`,
+    command: `next dev --hostname 127.0.0.1 --port ${port}`,
     url: env.BETTER_AUTH_URL,
     reuseExistingServer: false,
     env,

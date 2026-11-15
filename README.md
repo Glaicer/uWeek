@@ -28,7 +28,7 @@ pnpm dev                   # http://127.0.0.1:4200
 
 С `MAIL_OUTBOX_DIR=.outbox` ссылка для входа лежит в последнем файле `.outbox/*.json`.
 
-Изменили `src/db/schema.ts` — сгенерируйте миграцию `pnpm db:generate`; применится при следующем `pnpm dev` (или сразу: `pnpm db:migrate`).
+Изменили `src/db/schema.ts` — сгенерируйте миграцию `pnpm db:generate`; запущенный `pnpm dev` применит её сам (следит за `drizzle/meta`); без dev-сервера — `pnpm db:migrate`.
 
 ## Проверки
 
