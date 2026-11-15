@@ -526,7 +526,6 @@ a.calendarRow:not([aria-current="true"]):focus {
   min-width: 0;
   height: var(--row);
   padding: 0 2px;
-  border-bottom: 1px solid var(--rule);
 }
 
 .tabs {
