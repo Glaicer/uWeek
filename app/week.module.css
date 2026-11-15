@@ -179,8 +179,10 @@
   padding-top: 8px;
 }
 
+/* why: shadows thicken today's lines without changing its height, so facing bands stay level */
 .today {
   border-top-color: var(--accent);
+  box-shadow: inset 0 1px 0 var(--accent);
 }
 
 .today .number {
@@ -192,9 +194,9 @@
   color: var(--accent);
 }
 
-.today .rows {
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--accent-soft), transparent 70%);
+.today .row {
+  border-bottom-color: var(--accent);
+  box-shadow: inset 0 -1px 0 var(--accent);
 }
 
 .row {
