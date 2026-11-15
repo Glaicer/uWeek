@@ -558,8 +558,7 @@ a.calendarRow:not([aria-current="true"]):focus {
   outline-offset: -1px;
 }
 
-.tabItem:hover .action,
-.tabItem:focus-within .action {
+.managing .action {
   opacity: 1;
 }
 
@@ -578,10 +577,12 @@ a.calendarRow:not([aria-current="true"]):focus {
   cursor: pointer;
 }
 
-.listTool:hover,
-.listTool[aria-pressed="true"] {
-  background: var(--hover);
+.listTool:hover {
   color: var(--text);
+}
+
+.listTool[aria-pressed="true"] {
+  color: var(--accent);
 }
 
 .listTool:focus-visible {
@@ -720,7 +721,6 @@ a.calendarRow:not([aria-current="true"]):focus {
 }
 
 .action:hover {
-  background: var(--hover);
   color: var(--text);
 }
 
