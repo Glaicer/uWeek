@@ -54,7 +54,7 @@ test("a used sign-in link does not sign in again", async ({
   const other = await browser.newPage();
   await other.goto(link);
   await expect(other).toHaveURL(/\/sign-in\?error=INVALID_TOKEN$/);
-  await expect(other.getByRole("alert")).toHaveText(
+  await expect(other.getByRole("main").getByRole("alert")).toHaveText(
     "This link has expired or was already used. Request a new one.",
   );
   await other.close();
