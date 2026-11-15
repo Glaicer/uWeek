@@ -104,8 +104,8 @@ function Band({
         >
           {heading}
         </h2>
-        {aside}
       </div>
+      {aside}
       <div
         className={styles.rows}
         role={panelOf ? "tabpanel" : undefined}
@@ -731,8 +731,6 @@ function useShortcut(code: string, action: () => void): boolean {
 }
 
 const tabId = (list: TaskList) => `list-${list.id}`;
-// why: the .tabs CSS makes the label and each tab two thirds of a row tall
-const tabRows = (lists: number) => Math.ceil(((lists + 1) * 2) / 3);
 
 const SelectedList = createContext<[string | undefined, (id: string) => void]>([
   undefined,
@@ -846,7 +844,7 @@ function ListTabs({
   }
 
   function onTabKeyDown(event: KeyboardEvent) {
-    const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
     if (!step) return;
     event.preventDefault();
     const next = lists[Math.min(Math.max(index + step, 0), lists.length - 1)];
@@ -880,13 +878,12 @@ function ListTabs({
   );
 
   return (
-    <>
+    <div className={styles.tabBar}>
       <div
         className={styles.tabs}
         ref={tablist}
         role="tablist"
         aria-label="Lists"
-        aria-orientation="vertical"
       >
         {lists.map((list) =>
           editing === "rename" && list === selected ? (
@@ -1015,7 +1012,7 @@ function ListTabs({
           </button>
         </div>
       </dialog>
-    </>
+    </div>
   );
 }
 
@@ -1073,7 +1070,8 @@ export function Week({
     (place, index) => place.length + draftsByPlace[index].length,
   );
   const listCount = counts[7];
-  counts[7] = Math.max(listCount, tabRows(lists.length) - 1);
+  // why: the tab bar takes the Someday band's first row
+  counts[7] = listCount + 1;
   // why: band i faces band i+4 across the spine (Mon↔Fri … Thu↔Someday, or Sun↔Thu … Wed↔Someday) and keeps the same rows so the rules line up
   const rows = counts.map((count, band) =>
     Math.max(minRows, Math.max(count, counts[(band + 4) % 8]) + 1),
@@ -1216,7 +1214,7 @@ export function Week({
         })}
         <Band
           className={styles.someday}
-          rows={rows[7]}
+          rows={rows[7] - 1}
           panelOf={tabId(selected)}
           onEmptyClick={() => open(selected.id)}
           heading={<span className={styles.weekday}>Someday</span>}
