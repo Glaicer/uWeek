@@ -110,7 +110,7 @@ test("a user drags tasks within a day, between days and through a list, and find
   }
 });
 
-test("while dragging, a user flips weeks at the window's edge, one week per pass, and drops the task in a later week", async ({
+test("while dragging, a user flips a week each time the dragged card enters the edge strip, and drops the task in a later week", async ({
   page,
 }) => {
   const week = page.getByRole("heading", { level: 1 });
@@ -125,10 +125,13 @@ test("while dragging, a user flips weeks at the window's edge, one week per pass
   await page.mouse.down();
   await page.mouse.move(edge.x, edge.y, { steps: 12 });
   await expect(week).toHaveText("Week 47");
+  const overlapping = { x: edge.x - 40, y: edge.y };
+  await page.mouse.move(overlapping.x, overlapping.y, { steps: 3 });
+  await page.mouse.move(edge.x, edge.y, { steps: 3 });
   await page.waitForTimeout(1500);
   await expect(week).toHaveText("Week 47");
   await page.mouse.move(edge.x - 300, edge.y, { steps: 6 });
-  await page.mouse.move(edge.x, edge.y, { steps: 6 });
+  await page.mouse.move(overlapping.x, overlapping.y, { steps: 6 });
   await expect(week).toHaveText("Week 48");
   const monday = region(page, "23 Mon");
   const to = await point(monday.getByRole("button", { name: "Add task" }));

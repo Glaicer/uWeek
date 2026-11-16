@@ -79,7 +79,21 @@ export function startDrag(
     if (!ghost) return;
     ghost.style.transform = `translate(${pointer.x - offset.x}px, ${pointer.y - offset.y}px)`;
     const under = document.elementFromPoint(pointer.x, pointer.y);
-    press(under?.closest<HTMLElement>("[data-drag-press]") ?? null);
+    const card = ghost.getBoundingClientRect();
+    press(
+      [...document.querySelectorAll<HTMLElement>("[data-drag-press]")].find(
+        (element) => {
+          const box = element.getBoundingClientRect();
+          return (
+            box.width > 0 &&
+            box.left < card.right &&
+            box.right > card.left &&
+            box.top < card.bottom &&
+            box.bottom > card.top
+          );
+        },
+      ) ?? null,
+    );
     const zone = under?.closest<HTMLElement>(zones);
     if (!zone) {
       target = null;
@@ -110,7 +124,7 @@ export function startDrag(
       return;
     }
     element.dataset.hovered = "";
-    // why: the press re-renders the target, so one pass is tracked by the pointer being inside, not by the element
+    // why: the press re-renders the target, so one pass is tracked by the card being inside, not by the element
     if (inside) return;
     inside = true;
     element.click();
