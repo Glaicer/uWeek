@@ -14,6 +14,8 @@
   --primary-pressed: #0f161e;
   --row: 38px;
   color-scheme: light;
+  scrollbar-gutter: stable;
+  background: var(--desk);
 }
 
 * {
