@@ -21,8 +21,15 @@ import {
 } from "./calendar";
 import { db } from "./db/client";
 import { checklistItems, lists, tasks, taskSeries, users } from "./db/schema";
-import { taskColorValues, type Placement, type TaskColor } from "./model";
+import {
+  taskColorValues,
+  type CsvProvenance,
+  type Placement,
+  type TaskColor,
+} from "./model";
 import { occurrences, type Repeat, type Series } from "./recurrence";
+
+export { importCsv, previewCsv, type CsvImportPreview } from "./csv-import";
 
 export interface ChecklistItem {
   id: string;
@@ -38,6 +45,7 @@ export type Task = {
   color: TaskColor | null;
   checklist: ChecklistItem[];
   recurrence?: Recurrence;
+  readonly provenance?: CsvProvenance;
 } & Placement;
 
 export interface Recurrence {
@@ -244,13 +252,18 @@ const taskColumns = {
   color: tasks.color,
   seriesId: tasks.seriesId,
   occurrence: tasks.occurrence,
+  provenance: tasks.provenance,
 };
 
-type TaskRecord = Omit<Task, "date" | "listId" | "recurrence"> & {
+type TaskRecord = Omit<
+  Task,
+  "date" | "listId" | "recurrence" | "provenance"
+> & {
   date: string | null;
   listId: string | null;
   seriesId: string | null;
   occurrence: string | null;
+  provenance: CsvProvenance | null;
 };
 
 type SeriesRow = typeof taskSeries.$inferSelect;
@@ -280,9 +293,10 @@ const ruleColumns = (repeat: Repeat) => ({
 });
 
 function toTask(
-  { date, listId, seriesId, occurrence, ...task }: TaskRecord,
+  { date, listId, seriesId, occurrence, provenance, ...fields }: TaskRecord,
   series: ReadonlyMap<string, SeriesRow>,
 ): Task {
+  const task = { ...fields, ...(provenance ? { provenance } : {}) };
   const recurrence =
     seriesId !== null && occurrence !== null
       ? {
@@ -353,30 +367,34 @@ async function withChecklists(
     executor,
     rows.flatMap((row) => (row.seriesId ? [row.seriesId] : [])),
   );
-  const items = rows.length
-    ? await executor
-        .select({
-          taskId: checklistItems.taskId,
-          id: checklistItems.id,
-          text: checklistItems.text,
-          completed: checklistItems.completed,
-        })
-        .from(checklistItems)
-        .where(
-          inArray(
-            checklistItems.taskId,
-            rows.map((row) => row.id),
-          ),
-        )
-        .orderBy(asc(checklistItems.position))
-    : [];
+  const byTask = new Map<string, ChecklistItem[]>();
+  for (let offset = 0; offset < rows.length; offset += 1000) {
+    const items = await executor
+      .select({
+        taskId: checklistItems.taskId,
+        id: checklistItems.id,
+        text: checklistItems.text,
+        completed: checklistItems.completed,
+      })
+      .from(checklistItems)
+      .where(
+        inArray(
+          checklistItems.taskId,
+          rows.slice(offset, offset + 1000).map((row) => row.id),
+        ),
+      )
+      .orderBy(asc(checklistItems.position));
+    for (const { taskId, ...item } of items) {
+      const checklist = byTask.get(taskId);
+      if (checklist) checklist.push(item);
+      else byTask.set(taskId, [item]);
+    }
+  }
   return rows.map((row) =>
     toTask(
       {
         ...row,
-        checklist: items
-          .filter((item) => item.taskId === row.id)
-          .map(({ id, text, completed }) => ({ id, text, completed })),
+        checklist: byTask.get(row.id) ?? [],
       },
       series,
     ),

@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { validCalendarDate as validDate } from "./calendar";
+import { csvMaxBytes } from "./csv-limits";
 
 export const csvHeaders = [
   "Date",
@@ -31,8 +32,10 @@ export interface CsvPreview {
   readonly lastDate: string | undefined;
 }
 
+export class CsvError extends Error {}
+
 function recordError(record: number, reason: string): never {
-  throw new Error(`Запись ${record}: ${reason}`);
+  throw new CsvError(`Record ${record}: ${reason}`);
 }
 
 function validateGrammar(text: string): void {
@@ -47,6 +50,7 @@ function validateGrammar(text: string): void {
       }
       continue;
     }
+    if (char === "\r" && text[i + 1] === "\n") continue;
     if (char === "\n") {
       record++;
       state = "start";
@@ -55,33 +59,28 @@ function validateGrammar(text: string): void {
     } else if (char === '"' && state === "start") {
       state = "quoted";
     } else if (char === '"' || state === "closed" || char === "\r") {
-      recordError(
-        record,
-        "повреждённый CSV: неверное экранирование или разделитель",
-      );
+      recordError(record, "Malformed CSV: invalid quoting or delimiter");
     } else {
       state = "bare";
     }
   }
-  if (state === "quoted")
-    recordError(record, "повреждённый CSV: незакрытая кавычка");
+  if (state === "quoted") recordError(record, "Malformed CSV: unclosed quote");
 }
 
 export async function prepareCsv(file: Blob): Promise<CsvPreview> {
-  if (file.size > 5 * 1024 * 1024)
-    throw new Error("Файл превышает предел 5 MiB");
+  if (file.size > csvMaxBytes)
+    throw new CsvError("File exceeds the 5 MiB limit");
   const bytes = await file.arrayBuffer();
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
-    throw new Error("Неверная кодировка: требуется корректный UTF-8");
+    throw new CsvError("Invalid encoding: valid UTF-8 is required");
   }
-  text = text.replace(/\r\n/g, "\n");
   validateGrammar(text);
   const parsed = Papa.parse<string[]>(text, {
     delimiter: ",",
-    newline: "\n",
+    newline: text.slice(0, text.indexOf("\n")).endsWith("\r") ? "\r\n" : "\n",
     header: false,
     dynamicTyping: false,
     skipEmptyLines: false,
@@ -90,7 +89,7 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
   });
   if (parsed.errors.length) {
     const error = parsed.errors[0];
-    recordError((error.row ?? 0) + 1, "повреждённый CSV");
+    recordError((error.row ?? 0) + 1, "Malformed CSV");
   }
   const rows = parsed.data;
   if (text.endsWith("\n")) rows.pop();
@@ -102,11 +101,11 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
   ) {
     recordError(
       1,
-      "требуются ровно заголовки Date, Task, Notes, Checklist, Completed, List без повторов",
+      "Expected exactly Date, Task, Notes, Checklist, Completed, List headers without duplicates",
     );
   }
   if (rows.length > 100_000)
-    throw new Error("Файл превышает предел 100 000 логических записей");
+    throw new CsvError("File exceeds the limit of 100,000 logical records");
   const records: CsvRecord[] = [];
   let emptyRecords = 0;
   let duplicateOccurrences = 0;
@@ -117,19 +116,19 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
       emptyRecords++;
       continue;
     }
-    if (row.length !== 6) recordError(recordNumber, "требуется шесть полей");
+    if (row.length !== 6) recordError(recordNumber, "Expected six fields");
     const fields = Object.fromEntries(
       headers.map((header, i) => [header, row[i]]),
     ) as Record<(typeof csvHeaders)[number], string>;
-    if (!fields.Task.trim()) recordError(recordNumber, "пустое название Task");
+    if (!fields.Task.trim()) recordError(recordNumber, "Empty Task title");
     if (fields.Date !== "" && !validDate(fields.Date))
-      recordError(recordNumber, "некорректная календарная Date (YYYY-MM-DD)");
+      recordError(recordNumber, "Invalid calendar Date (YYYY-MM-DD)");
     if (fields.Date !== "" && fields.List.trim() !== "")
-      recordError(recordNumber, "неоднозначное размещение Date + List");
+      recordError(recordNumber, "Ambiguous placement: Date + List");
     if (fields.Checklist !== "")
-      recordError(recordNumber, "непустой Checklist не поддерживается");
+      recordError(recordNumber, "Non-empty Checklist is not supported");
     if (!/^(true|false)$/i.test(fields.Completed.trim()))
-      recordError(recordNumber, "Completed должен быть TRUE или FALSE");
+      recordError(recordNumber, "Completed must be TRUE or FALSE");
     const signature = JSON.stringify(
       csvHeaders.map((header) => fields[header]),
     );
@@ -141,8 +140,7 @@ export async function prepareCsv(file: Blob): Promise<CsvPreview> {
       title: fields.Task.trim(),
       notes: fields.Notes,
       date: fields.Date,
-      listTitle:
-        fields.Date === "" ? fields.List.trim() || "Входящие" : undefined,
+      listTitle: fields.Date === "" ? fields.List.trim() || "Inbox" : undefined,
       completed: fields.Completed.trim().toLowerCase() === "true",
     });
   }

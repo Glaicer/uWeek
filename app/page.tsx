@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "../src/auth";
 import { readWeek, weekQuery } from "../src/planner";
 import { setWeekStart, signOut } from "./actions";
@@ -68,6 +69,13 @@ export default async function WeekPage({
                   </button>
                 ))}
               </form>
+              <Link
+                className={styles.menuItem}
+                style={{ display: "block", textDecoration: "none" }}
+                href={`/settings/import?week=${view.dates[0]}`}
+              >
+                Import from Tweek
+              </Link>
               <form action={signOut}>
                 <button className={styles.menuItem}>Sign out</button>
               </form>

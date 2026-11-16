@@ -6,14 +6,16 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
 import type { WeekStart } from "../calendar";
-import { taskColorValues, type TaskColor } from "../model";
+import { taskColorValues, type CsvProvenance, type TaskColor } from "../model";
 import type { MonthEnd, Repeat, Weekday } from "../recurrence";
 
 const createdAt = () =>
@@ -166,6 +168,7 @@ export const tasks = pgTable(
     seriesId: text(),
     occurrence: date({ mode: "string" }),
     deletedAt: timestamp({ withTimezone: true }),
+    provenance: jsonb().$type<CsvProvenance>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -218,4 +221,19 @@ export const checklistItems = pgTable(
     position: integer().notNull(),
   },
   (table) => [index().on(table.taskId, table.position)],
+);
+
+export const importHistory = pgTable(
+  "import_history",
+  {
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fingerprint: text().notNull(),
+    importedAt: createdAt(),
+    addedTasks: integer().notNull(),
+    addedLists: integer().notNull(),
+    emptyRecords: integer().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.fingerprint] })],
 );
