@@ -21,15 +21,8 @@ import {
 } from "./calendar";
 import { db } from "./db/client";
 import { checklistItems, lists, tasks, taskSeries, users } from "./db/schema";
-import {
-  taskColorValues,
-  type CsvProvenance,
-  type Placement,
-  type TaskColor,
-} from "./model";
+import { taskColorValues, type Placement, type TaskColor } from "./model";
 import { occurrences, type Repeat, type Series } from "./recurrence";
-
-export { importCsv, previewCsv, type CsvImportPreview } from "./csv-import";
 
 export interface ChecklistItem {
   id: string;
@@ -45,7 +38,6 @@ export type Task = {
   color: TaskColor | null;
   checklist: ChecklistItem[];
   recurrence?: Recurrence;
-  readonly provenance?: CsvProvenance;
 } & Placement;
 
 export interface Recurrence {
@@ -252,18 +244,13 @@ const taskColumns = {
   color: tasks.color,
   seriesId: tasks.seriesId,
   occurrence: tasks.occurrence,
-  provenance: tasks.provenance,
 };
 
-type TaskRecord = Omit<
-  Task,
-  "date" | "listId" | "recurrence" | "provenance"
-> & {
+type TaskRecord = Omit<Task, "date" | "listId" | "recurrence"> & {
   date: string | null;
   listId: string | null;
   seriesId: string | null;
   occurrence: string | null;
-  provenance: CsvProvenance | null;
 };
 
 type SeriesRow = typeof taskSeries.$inferSelect;
@@ -293,10 +280,9 @@ const ruleColumns = (repeat: Repeat) => ({
 });
 
 function toTask(
-  { date, listId, seriesId, occurrence, provenance, ...fields }: TaskRecord,
+  { date, listId, seriesId, occurrence, ...fields }: TaskRecord,
   series: ReadonlyMap<string, SeriesRow>,
 ): Task {
-  const task = { ...fields, ...(provenance ? { provenance } : {}) };
   const recurrence =
     seriesId !== null && occurrence !== null
       ? {
@@ -307,9 +293,9 @@ function toTask(
           },
         }
       : {};
-  if (date !== null) return { ...task, ...recurrence, date };
-  if (listId !== null) return { ...task, ...recurrence, listId };
-  throw new Error(`Task ${task.id} has neither a date nor a list`);
+  if (date !== null) return { ...fields, ...recurrence, date };
+  if (listId !== null) return { ...fields, ...recurrence, listId };
+  throw new Error(`Task ${fields.id} has neither a date nor a list`);
 }
 
 const occurrenceIdOf = (seriesId: string, date: string) =>

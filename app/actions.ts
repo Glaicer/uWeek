@@ -1,11 +1,10 @@
 "use server";
 
 import { APIError } from "better-auth/api";
-import { refresh, revalidatePath } from "next/cache";
+import { refresh } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "../src/auth";
-import { CsvError } from "../src/csv";
 import * as planner from "../src/planner";
 import type { Placement } from "../src/model";
 import type { Scope, Task, TaskEdits, TaskList } from "../src/planner";
@@ -125,40 +124,4 @@ export async function moveList(id: string, to: number): Promise<void> {
 export async function deleteList(id: string): Promise<void> {
   if (!(await planner.deleteList(await currentUserId(), id)))
     throw new Error("List not deleted");
-}
-
-export async function previewCsv(form: FormData) {
-  const userId = await currentUserId();
-  const file = form.get("file");
-  if (!(file instanceof File)) return { error: "Choose a CSV file." };
-  try {
-    return { preview: await planner.previewCsv(userId, file) };
-  } catch (error) {
-    return {
-      error:
-        error instanceof CsvError
-          ? error.message
-          : "Could not read the file. Try again.",
-    };
-  }
-}
-
-export async function importCsv(form: FormData) {
-  const userId = await currentUserId();
-  const file = form.get("file");
-  const fingerprint = form.get("fingerprint");
-  if (!(file instanceof File) || typeof fingerprint !== "string")
-    return { error: "Choose a CSV file and review its preview first." };
-  try {
-    const result = await planner.importCsv(userId, file, fingerprint);
-    revalidatePath("/");
-    return { result };
-  } catch (error) {
-    return {
-      error:
-        error instanceof CsvError
-          ? error.message
-          : "Could not import the file. Nothing was added. Try again.",
-    };
-  }
 }
