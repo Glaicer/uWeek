@@ -1,8 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "../src/auth";
-import { validCalendarDate } from "../src/calendar";
-import { readWeek } from "../src/planner";
+import { readWeek, weekQuery } from "../src/planner";
 import { setWeekStart, signOut } from "./actions";
 import { requestTime } from "./clock";
 import { DetectTimeZone, KeepAcrossWeeks, Week } from "./week";
@@ -16,27 +15,27 @@ const weekStarts = [
 export default async function WeekPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string | string[] }>;
+  searchParams: Promise<{
+    week?: string | string[];
+    focus?: string | string[];
+  }>;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
-  const { week } = await searchParams;
-  if (
-    week !== undefined &&
-    (typeof week !== "string" || !validCalendarDate(week))
-  )
-    redirect("/");
-  const view = await readWeek(session.user.id, { week }, await requestTime());
+  const query = weekQuery.safeParse(await searchParams);
+  if (!query.success) redirect("/");
+  const view = await readWeek(session.user.id, query.data, await requestTime());
   if (!view.timeZone) return <DetectTimeZone />;
   return (
     <KeepAcrossWeeks>
       <Week
-        key={`${view.dates[0]} ${view.today}`}
+        key={`${view.dates[0]} ${view.today} ${query.data.focus ?? ""}`}
         today={view.today}
         dates={view.dates}
         weekStartsOn={view.weekStartsOn}
         lists={view.lists}
         tasks={view.tasks}
+        focusId={view.focusId}
         menu={
           <>
             <button

@@ -3,6 +3,7 @@ import {
   asc,
   between,
   eq,
+  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -133,7 +134,95 @@ const settings = z
       settings.timeZone !== undefined || settings.weekStartsOn !== undefined,
     "Nothing to change",
   );
-const weekQuery = z.object({ week: isoDate.optional() });
+export const weekQuery = z.object({
+  week: isoDate.optional(),
+  focus: taskId.optional(),
+});
+const searchQuery = z.object({
+  query: z.string().trim().min(1).max(500),
+  cursor: z.int().min(0).default(0),
+});
+
+export interface SearchResult {
+  id: string;
+  title: string;
+  notes: string;
+  repeats: boolean;
+}
+
+export interface SearchPage {
+  items: SearchResult[];
+  nextCursor: number | null;
+}
+
+export async function searchTasks(
+  userId: string,
+  input: z.input<typeof searchQuery>,
+): Promise<SearchPage> {
+  const { query, cursor } = searchQuery.parse(input);
+  const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
+  const size = 20;
+  const matches = () =>
+    db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        notes: tasks.notes,
+        repeats: sql<boolean>`false`,
+      })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          isNull(tasks.seriesId),
+          isNull(tasks.deletedAt),
+          or(ilike(tasks.title, pattern), ilike(tasks.notes, pattern)),
+        ),
+      )
+      .unionAll(
+        db
+          .select({
+            id: taskSeries.id,
+            title: taskSeries.title,
+            notes: taskSeries.notes,
+            repeats: sql<boolean>`true`,
+          })
+          .from(taskSeries)
+          .where(
+            and(
+              eq(taskSeries.userId, userId),
+              or(
+                isNull(taskSeries.endsOn),
+                sql`${taskSeries.endsOn} >= ${taskSeries.startsOn}`,
+                sql`exists (
+                select 1 from ${tasks}
+                where ${tasks.userId} = ${userId}
+                  and ${tasks.seriesId} = ${taskSeries.id}
+                  and ${tasks.deletedAt} is null
+              )`,
+              ),
+              or(
+                ilike(taskSeries.title, pattern),
+                ilike(taskSeries.notes, pattern),
+              ),
+            ),
+          ),
+      )
+      .orderBy(sql`title`, sql`id`)
+      .limit(size + 1);
+  const items: SearchResult[] = [];
+  let offset = cursor;
+  for (;;) {
+    const rows = await matches().offset(offset);
+    for (const row of rows) {
+      const at = offset++;
+      if (row.repeats && !(await searchTarget(userId, row.id))) continue;
+      if (items.length === size) return { items, nextCursor: at };
+      items.push(row);
+    }
+    if (rows.length < size + 1) return { items, nextCursor: null };
+  }
+}
 
 export interface WeekView {
   timeZone: string | null;
@@ -142,6 +231,7 @@ export interface WeekView {
   dates: string[];
   lists: TaskList[];
   tasks: Task[];
+  focusId?: string;
 }
 
 const taskColumns = {
@@ -896,12 +986,52 @@ async function rollOverUnfinishedTasks(userId: string, today: string) {
   });
 }
 
+async function searchTarget(userId: string, id: string) {
+  const [stored] = await db
+    .select({ id: tasks.id, date: tasks.date })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.userId, userId),
+        or(eq(tasks.id, id), eq(tasks.seriesId, id)),
+        isNull(tasks.deletedAt),
+      ),
+    )
+    .orderBy(...taskOrder)
+    .limit(1);
+  if (stored) return stored;
+  const [series] = await db
+    .select()
+    .from(taskSeries)
+    .where(and(eq(taskSeries.userId, userId), eq(taskSeries.id, id)));
+  if (!series) return;
+  const taken = new Set(
+    (
+      await db
+        .select({ occurrence: tasks.occurrence })
+        .from(tasks)
+        .where(and(eq(tasks.userId, userId), eq(tasks.seriesId, id)))
+    ).map((task) => task.occurrence),
+  );
+  const days =
+    series.interval * { day: 1, week: 7, month: 31, year: 366 }[series.every];
+  for (let from = series.startsOn; ;) {
+    const to = addDays(from, days);
+    const date = occurrences(seriesOf(series), from, to).find(
+      (date) => !taken.has(date),
+    );
+    if (date) return { id: occurrenceIdOf(series.id, date), date };
+    if (series.endsOn !== null && to >= series.endsOn) return;
+    from = addDays(to, 1);
+  }
+}
+
 export async function readWeek(
   userId: string,
   input: z.input<typeof weekQuery>,
   now: Date,
 ): Promise<WeekView> {
-  const { week } = weekQuery.parse(input);
+  const { week, focus } = weekQuery.parse(input);
   const [user] = await db
     .select({ timeZone: users.timeZone, weekStartsOn: users.weekStartsOn })
     .from(users)
@@ -909,12 +1039,14 @@ export async function readWeek(
   // why: before the browser reports a zone "today" is only a guess, so nothing is moved onto it
   const today = todayIn(user.timeZone ?? "UTC", now);
   if (user.timeZone) await rollOverUnfinishedTasks(userId, today);
-  const dates = weekOf(week ?? today, user.weekStartsOn);
+  const target = focus ? await searchTarget(userId, focus) : undefined;
+  const dates = weekOf(target?.date ?? week ?? today, user.weekStartsOn);
   return {
     timeZone: user.timeZone,
     weekStartsOn: user.weekStartsOn,
     today,
     dates,
+    focusId: target?.id,
     ...(await listsAndTheirTasks(userId, dates[0], dates[6])),
   };
 }

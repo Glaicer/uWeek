@@ -99,6 +99,13 @@ export async function listTasks(from: string, to: string): Promise<Task[]> {
   return planner.listTasks(await currentUserId(), { from, to });
 }
 
+export async function searchTasks(
+  query: string,
+  cursor: number,
+): Promise<planner.SearchPage> {
+  return planner.searchTasks(await currentUserId(), { query, cursor });
+}
+
 export async function createList(title: string): Promise<TaskList> {
   return planner.createList(await currentUserId(), { title });
 }

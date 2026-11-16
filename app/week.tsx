@@ -50,6 +50,7 @@ import {
   updateTask,
 } from "./actions";
 import { startDrag } from "./drag";
+import { Search } from "./search";
 import styles from "./week.module.css";
 
 const dateRange = new Intl.DateTimeFormat("en-GB", {
@@ -434,6 +435,7 @@ function useScopeQuestion(): [AskScope, ReactNode] {
 
 function TaskRow({
   task,
+  focusVisit,
   onChanged,
   onDeleted,
   onReload,
@@ -441,6 +443,7 @@ function TaskRow({
   askScope,
 }: {
   task: Task;
+  focusVisit?: number;
   onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
   onReload: () => Promise<void>;
@@ -448,6 +451,12 @@ function TaskRow({
   askScope: AskScope;
 }) {
   const moverRef = useContext(Mover);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusVisit === undefined) return;
+    button.current?.focus({ preventScroll: true });
+    button.current?.scrollIntoView({ block: "center" });
+  }, [focusVisit]);
   const [completed, setCompleted] = useOptimistic(task.completed);
   const { save, alert } = useSave();
   const detailed = task.notes !== "" || task.checklist.length > 0;
@@ -486,9 +495,11 @@ function TaskRow({
       }
     >
       <button
+        ref={button}
         className={styles.name}
         type="button"
         aria-pressed={completed}
+        aria-current={focusVisit !== undefined ? "true" : undefined}
         aria-description={
           [
             task.color && colorName(task.color),
@@ -1751,6 +1762,7 @@ export function Week({
   weekStartsOn,
   lists: initialLists,
   tasks: initialTasks,
+  focusId,
   menu,
 }: {
   today: string;
@@ -1758,12 +1770,18 @@ export function Week({
   weekStartsOn: WeekStart;
   lists: TaskList[];
   tasks: Task[];
+  focusId?: string;
   menu: ReactNode;
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [lists, setLists] = useState(initialLists);
-  const [selectedId, setSelectedId] = useContext(SelectedList);
+  const [focus, setFocus] = useState({ id: focusId, visit: 0 });
+  const [rememberedId, rememberId] = useContext(SelectedList);
+  const [selectedId, setSelectedId] = useState(
+    initialTasks.find((task) => task.id === focusId)?.listId ?? rememberedId,
+  );
   const selected = lists.find((list) => list.id === selectedId) ?? lists[0];
+  useEffect(() => rememberId(selected.id), [rememberId, selected.id]);
   const [editing, setEditing] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -1864,6 +1882,7 @@ export function Week({
         <TaskRow
           key={task.id}
           task={task}
+          focusVisit={task.id === focus.id ? focus.visit : undefined}
           onChanged={replace}
           onDeleted={remove}
           onReload={reload}
@@ -1935,6 +1954,16 @@ export function Week({
           >
             ›
           </WeekLink>
+          <Search
+            onSelect={(id) => {
+              const target = tasks.find(
+                (task) => task.id === id || task.recurrence?.seriesId === id,
+              );
+              if (!target) return;
+              if (target.listId) setSelectedId(target.listId);
+              setFocus((focus) => ({ id: target.id, visit: focus.visit + 1 }));
+            }}
+          />
           {menu}
           <Tool
             primary
