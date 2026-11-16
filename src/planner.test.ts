@@ -12,6 +12,7 @@ import {
   renameList,
   updateSettings,
   updateTask,
+  type Task,
 } from "./planner";
 
 const week = { from: "2026-11-09", to: "2026-11-15" };
@@ -449,4 +450,233 @@ test("a task moves to another date or into a list, landing at the end; staying p
       .map((task) => task.title),
   ).toEqual(["Waiting", "Gym"]);
   expect(await titlesOn("2026-11-10")).toEqual(["Haircut"]);
+});
+
+const daily = { every: "day", interval: 1, until: null } as const;
+const placesOf = (list: Task[]) =>
+  list.map((task) => [task.date ?? task.listId, task.title, task.completed]);
+
+test("a task made daily falls on every following day of the range, only for its owner", async () => {
+  const user = await newUser();
+  const other = await newUser();
+  const task = await createTask(user, { title: "Stretch", date: "2026-11-12" });
+
+  const made = await updateTask(user, task.id, { repeat: daily });
+  expect(made).toMatchObject({
+    id: task.id,
+    date: "2026-11-12",
+    recurrence: { occurrence: "2026-11-12", repeat: daily },
+  });
+  const listed = await listTasks(user, week);
+  expect(placesOf(listed)).toEqual([
+    ["2026-11-12", "Stretch", false],
+    ["2026-11-13", "Stretch", false],
+    ["2026-11-14", "Stretch", false],
+    ["2026-11-15", "Stretch", false],
+  ]);
+  expect(listed[1]).toMatchObject({
+    recurrence: { occurrence: "2026-11-13", repeat: daily },
+  });
+  expect(await listTasks(other, week)).toEqual([]);
+  expect(await updateTask(other, listed[1].id, { completed: true })).toBeNull();
+  expect(await deleteTask(other, listed[1].id)).toBe(false);
+});
+
+test("an occurrence is completed, renamed and deleted on its own and keeps its id", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Read", date: "2026-11-09" });
+  await updateTask(user, task.id, { repeat: daily });
+  const [, tue, wed, thu] = await listTasks(user, week);
+
+  expect(await updateTask(user, tue.id, { completed: true })).toMatchObject({
+    id: tue.id,
+    date: "2026-11-10",
+    completed: true,
+  });
+  await updateTask(user, wed.id, { title: "Read a chapter" });
+  expect(await deleteTask(user, thu.id)).toBe(true);
+
+  const listed = await listTasks(user, week);
+  expect(placesOf(listed)).toEqual([
+    ["2026-11-09", "Read", false],
+    ["2026-11-10", "Read", true],
+    ["2026-11-11", "Read a chapter", false],
+    ["2026-11-13", "Read", false],
+    ["2026-11-14", "Read", false],
+    ["2026-11-15", "Read", false],
+  ]);
+  expect(listed[1].id).toBe(tue.id);
+});
+
+test("this and following ends the old series the day before and starts a new one from this occurrence", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Run", date: "2026-11-09" });
+  await updateTask(user, task.id, { repeat: daily });
+  const before = await listTasks(user, week);
+  await updateTask(user, before[5].id, { completed: true });
+
+  await updateTask(
+    user,
+    before[3].id,
+    { title: "Run 5k", color: "green" },
+    "following",
+  );
+  const after = await listTasks(user, week);
+  expect(placesOf(after)).toEqual([
+    ["2026-11-09", "Run", false],
+    ["2026-11-10", "Run", false],
+    ["2026-11-11", "Run", false],
+    ["2026-11-12", "Run 5k", false],
+    ["2026-11-13", "Run 5k", false],
+    ["2026-11-14", "Run 5k", true],
+    ["2026-11-15", "Run 5k", false],
+  ]);
+  expect(after[2].color).toBeNull();
+  expect(after[6].color).toBe("green");
+  expect(after[6].recurrence?.seriesId).not.toBe(after[2].recurrence?.seriesId);
+
+  expect(await deleteTask(user, after[3].id, "following")).toBe(true);
+  expect(placesOf(await listTasks(user, week))).toEqual([
+    ["2026-11-09", "Run", false],
+    ["2026-11-10", "Run", false],
+    ["2026-11-11", "Run", false],
+    ["2026-11-14", "Run 5k", true],
+  ]);
+});
+
+test("changing the rule from an occurrence repeats from that day on the new rule; stopping it ends only that series", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Gym", date: "2026-11-09" });
+  await updateTask(user, task.id, { repeat: daily });
+  const before = await listTasks(user, week);
+
+  await updateTask(user, before[2].id, {
+    repeat: { every: "week", interval: 1, weekdays: [3, 5], until: null },
+  });
+  expect(placesOf(await listTasks(user, week))).toEqual([
+    ["2026-11-09", "Gym", false],
+    ["2026-11-10", "Gym", false],
+    ["2026-11-11", "Gym", false],
+    ["2026-11-13", "Gym", false],
+  ]);
+
+  await updateTask(user, before[0].id, { repeat: null });
+  const plain = await listTasks(user, week);
+  expect(placesOf(plain)).toEqual([
+    ["2026-11-09", "Gym", false],
+    ["2026-11-11", "Gym", false],
+    ["2026-11-13", "Gym", false],
+  ]);
+  expect(plain[0].recurrence).toBeUndefined();
+});
+
+test("deleting this and following leaves the days before and keeps completed occurrences as plain tasks", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Walk", date: "2026-11-09" });
+  await updateTask(user, task.id, { repeat: daily });
+  const before = await listTasks(user, week);
+  await updateTask(user, before[5].id, { completed: true });
+
+  expect(await deleteTask(user, before[2].id, "following")).toBe(true);
+  const after = await listTasks(user, week);
+  expect(placesOf(after)).toEqual([
+    ["2026-11-09", "Walk", false],
+    ["2026-11-10", "Walk", false],
+    ["2026-11-14", "Walk", true],
+  ]);
+  expect(after[2].recurrence).toBeUndefined();
+  expect(
+    await listTasks(user, { from: "2026-11-16", to: "2026-11-22" }),
+  ).toEqual([]);
+});
+
+test("a monthly series on the 31st can move to the 1st of the next month", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Rent", date: "2027-01-31" });
+  await updateTask(user, task.id, {
+    repeat: { every: "month", interval: 1, monthEnd: "overflow", until: null },
+  });
+  expect(
+    (await listTasks(user, { from: "2027-02-01", to: "2027-03-31" })).map(
+      (task) => task.date,
+    ),
+  ).toEqual(["2027-03-01", "2027-03-31"]);
+});
+
+test("only a dated task repeats", async () => {
+  const user = await newUser();
+  const list = await createList(user, { title: "Someday" });
+  const task = await createTask(user, { title: "Idea", listId: list.id });
+  await expect(updateTask(user, task.id, { repeat: daily })).rejects.toThrow();
+});
+
+test("missed occurrences of past days roll over to today and remember their day; future ones stay", async () => {
+  const user = await newUser();
+  await updateSettings(user, { timeZone: "Europe/Moscow" });
+  const task = await createTask(user, { title: "Water", date: "2026-11-10" });
+  await updateTask(user, task.id, { repeat: daily });
+  const [, wed] = await listTasks(user, week);
+  await updateTask(user, wed.id, { completed: true });
+  const now = new Date("2026-11-13T10:00:00+03:00");
+
+  for (let read = 0; read < 2; read++) {
+    const { tasks } = await readWeek(user, {}, now);
+    expect(
+      tasks.map((task) => [
+        task.date,
+        task.recurrence?.occurrence,
+        task.completed,
+      ]),
+    ).toEqual([
+      ["2026-11-11", "2026-11-11", true],
+      ["2026-11-13", "2026-11-10", false],
+      ["2026-11-13", "2026-11-12", false],
+      ["2026-11-13", "2026-11-13", false],
+      ["2026-11-14", "2026-11-14", false],
+      ["2026-11-15", "2026-11-15", false],
+    ]);
+  }
+});
+
+test("an occurrence moved to another day or a list stays there and the series does not bring it back", async () => {
+  const user = await newUser();
+  const list = await createList(user, { title: "Someday" });
+  const task = await createTask(user, { title: "Plants", date: "2026-11-09" });
+  await updateTask(user, task.id, {
+    repeat: { every: "week", interval: 1, weekdays: [1, 3], until: null },
+  });
+  const [, wed] = await listTasks(user, week);
+
+  await updateTask(user, wed.id, { placement: { date: "2026-11-14" } });
+  expect(placesOf(await listTasks(user, week))).toEqual([
+    ["2026-11-09", "Plants", false],
+    ["2026-11-14", "Plants", false],
+  ]);
+  await updateTask(user, wed.id, { placement: { listId: list.id } });
+  const { tasks } = await readWeek(user, {}, new Date("2026-11-09T10:00:00Z"));
+  expect(placesOf(tasks)).toEqual([
+    ["2026-11-09", "Plants", false],
+    [list.id, "Plants", false],
+  ]);
+});
+
+test("changing the rule of a missed occurrence keeps the other missed ones on today as plain tasks", async () => {
+  const user = await newUser();
+  await updateSettings(user, { timeZone: "Europe/Moscow" });
+  const task = await createTask(user, { title: "Read", date: "2026-11-10" });
+  await updateTask(user, task.id, { repeat: daily });
+  const now = new Date("2026-11-13T10:00:00+03:00");
+  const [missed] = (await readWeek(user, {}, now)).tasks;
+
+  await updateTask(user, missed.id, {
+    repeat: { every: "week", interval: 1, weekdays: [5], until: null },
+  });
+  const { tasks } = await readWeek(user, {}, now);
+  expect(
+    tasks.map((task) => [task.date, task.recurrence?.occurrence ?? null]),
+  ).toEqual([
+    ["2026-11-13", "2026-11-13"],
+    ["2026-11-13", null],
+    ["2026-11-13", null],
+  ]);
 });

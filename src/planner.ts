@@ -5,14 +5,23 @@ import {
   eq,
   inArray,
   isNotNull,
+  isNull,
+  not,
   or,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
-import { todayIn, validCalendarDate, weekOf, type WeekStart } from "./calendar";
+import {
+  addDays,
+  todayIn,
+  validCalendarDate,
+  weekOf,
+  type WeekStart,
+} from "./calendar";
 import { db } from "./db/client";
-import { checklistItems, lists, tasks, users } from "./db/schema";
+import { checklistItems, lists, tasks, taskSeries, users } from "./db/schema";
 import { taskColorValues, type Placement, type TaskColor } from "./model";
+import { occurrences, type Repeat, type Series } from "./recurrence";
 
 export interface ChecklistItem {
   id: string;
@@ -27,7 +36,16 @@ export type Task = {
   notes: string;
   color: TaskColor | null;
   checklist: ChecklistItem[];
+  recurrence?: Recurrence;
 } & Placement;
+
+export interface Recurrence {
+  seriesId: string;
+  occurrence: string;
+  repeat: Repeat;
+}
+
+export type Scope = "this" | "following";
 
 export interface TaskList {
   id: string;
@@ -36,7 +54,31 @@ export interface TaskList {
 
 const isoDate = z.string().refine(validCalendarDate, "Invalid date");
 const title = z.string().trim().min(1).max(500);
-const taskId = z.uuid();
+const occurrenceId = /^([0-9a-f-]{36})_(\d{4}-\d{2}-\d{2})$/;
+const taskId = z.union([z.uuid(), z.string().regex(occurrenceId)]);
+const scope = z.enum(["this", "following"]);
+const interval = z.int().min(1).max(999);
+const until = isoDate.nullable();
+const repeat = z.discriminatedUnion("every", [
+  z.object({ every: z.literal("day"), interval, until }),
+  z.object({
+    every: z.literal("week"),
+    interval,
+    until,
+    weekdays: z
+      .array(z.literal([0, 1, 2, 3, 4, 5, 6]))
+      .min(1)
+      .max(7)
+      .transform((days) => [...new Set(days)].sort()),
+  }),
+  z.object({
+    every: z.literal("month"),
+    interval,
+    until,
+    monthEnd: z.enum(["clamp", "last", "overflow"]),
+  }),
+  z.object({ every: z.literal("year"), interval, until }),
+]);
 const range = z.object({ from: isoDate, to: isoDate });
 const index = z.int().min(0).optional();
 const placement = z.xor([
@@ -61,6 +103,7 @@ const edits = z
       .max(200)
       .optional(),
     placement: placement.optional(),
+    repeat: repeat.nullable().optional(),
   })
   .refine(
     (edits) => Object.values(edits).some((edit) => edit !== undefined),
@@ -109,17 +152,84 @@ const taskColumns = {
   completed: sql<boolean>`${tasks.completedAt} is not null`,
   notes: tasks.notes,
   color: tasks.color,
+  seriesId: tasks.seriesId,
+  occurrence: tasks.occurrence,
 };
 
-type TaskRecord = Omit<Task, "date" | "listId"> & {
+type TaskRecord = Omit<Task, "date" | "listId" | "recurrence"> & {
   date: string | null;
   listId: string | null;
+  seriesId: string | null;
+  occurrence: string | null;
 };
 
-function toTask({ date, listId, ...task }: TaskRecord): Task {
-  if (date !== null) return { ...task, date };
-  if (listId !== null) return { ...task, listId };
+type SeriesRow = typeof taskSeries.$inferSelect;
+
+function repeatOf(row: SeriesRow): Repeat {
+  const base = { interval: row.interval, until: row.endsOn };
+  if (row.every === "week")
+    return { ...base, every: "week", weekdays: row.weekdays! };
+  if (row.every === "month")
+    return { ...base, every: "month", monthEnd: row.monthEnd! };
+  return { ...base, every: row.every };
+}
+
+const seriesOf = (row: SeriesRow): Series => ({
+  repeat: repeatOf(row),
+  anchor: row.anchor,
+  startsOn: row.startsOn,
+  weekStartsOn: row.weekStartsOn,
+});
+
+const ruleColumns = (repeat: Repeat) => ({
+  every: repeat.every,
+  interval: repeat.interval,
+  endsOn: repeat.until,
+  weekdays: repeat.every === "week" ? repeat.weekdays : null,
+  monthEnd: repeat.every === "month" ? repeat.monthEnd : null,
+});
+
+function toTask(
+  { date, listId, seriesId, occurrence, ...task }: TaskRecord,
+  series: ReadonlyMap<string, SeriesRow>,
+): Task {
+  const recurrence =
+    seriesId !== null && occurrence !== null
+      ? {
+          recurrence: {
+            seriesId,
+            occurrence,
+            repeat: repeatOf(series.get(seriesId)!),
+          },
+        }
+      : {};
+  if (date !== null) return { ...task, ...recurrence, date };
+  if (listId !== null) return { ...task, ...recurrence, listId };
   throw new Error(`Task ${task.id} has neither a date nor a list`);
+}
+
+const occurrenceIdOf = (seriesId: string, date: string) =>
+  `${seriesId}_${date}`;
+
+function virtualTask(series: SeriesRow, date: string): Task {
+  return {
+    id: occurrenceIdOf(series.id, date),
+    title: series.title,
+    completed: false,
+    notes: series.notes,
+    color: series.color,
+    checklist: series.checklist.map((text) => ({
+      id: crypto.randomUUID(),
+      text,
+      completed: false,
+    })),
+    recurrence: {
+      seriesId: series.id,
+      occurrence: date,
+      repeat: repeatOf(series),
+    },
+    date,
+  };
 }
 
 const taskOrder = [
@@ -132,10 +242,27 @@ const taskOrder = [
 const listColumns = { id: lists.id, title: lists.title };
 const listOrder = [asc(lists.position), asc(lists.createdAt), asc(lists.id)];
 
+type Executor = Pick<typeof db, "select">;
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function seriesById(executor: Executor, ids: string[]) {
+  const rows = ids.length
+    ? await executor
+        .select()
+        .from(taskSeries)
+        .where(inArray(taskSeries.id, [...new Set(ids)]))
+    : [];
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
 async function withChecklists(
-  executor: Pick<typeof db, "select">,
+  executor: Executor,
   rows: Omit<TaskRecord, "checklist">[],
 ): Promise<Task[]> {
+  const series = await seriesById(
+    executor,
+    rows.flatMap((row) => (row.seriesId ? [row.seriesId] : [])),
+  );
   const items = rows.length
     ? await executor
         .select({
@@ -154,12 +281,63 @@ async function withChecklists(
         .orderBy(asc(checklistItems.position))
     : [];
   return rows.map((row) =>
-    toTask({
-      ...row,
-      checklist: items
-        .filter((item) => item.taskId === row.id)
-        .map(({ id, text, completed }) => ({ id, text, completed })),
-    }),
+    toTask(
+      {
+        ...row,
+        checklist: items
+          .filter((item) => item.taskId === row.id)
+          .map(({ id, text, completed }) => ({ id, text, completed })),
+      },
+      series,
+    ),
+  );
+}
+
+async function withOccurrences(
+  executor: Executor,
+  userId: string,
+  rows: Omit<TaskRecord, "checklist">[],
+  from: string,
+  to: string,
+): Promise<Task[]> {
+  const [read, series] = await Promise.all([
+    withChecklists(executor, rows),
+    executor
+      .select()
+      .from(taskSeries)
+      .where(
+        and(
+          eq(taskSeries.userId, userId),
+          sql`${taskSeries.startsOn} <= ${to}`,
+          or(isNull(taskSeries.endsOn), sql`${taskSeries.endsOn} >= ${from}`),
+        ),
+      )
+      .orderBy(asc(taskSeries.createdAt), asc(taskSeries.id)),
+  ]);
+  const taken = new Set(
+    (series.length
+      ? await executor
+          .select({ seriesId: tasks.seriesId, occurrence: tasks.occurrence })
+          .from(tasks)
+          .where(
+            and(
+              inArray(
+                tasks.seriesId,
+                series.map((row) => row.id),
+              ),
+              between(tasks.occurrence, from, to),
+            ),
+          )
+      : []
+    ).map((row) => occurrenceIdOf(row.seriesId!, row.occurrence!)),
+  );
+  const virtual = series.flatMap((row) =>
+    occurrences(seriesOf(row), from, to)
+      .map((date) => virtualTask(row, date))
+      .filter((task) => !taken.has(task.id)),
+  );
+  return [...read, ...virtual].sort((a, b) =>
+    a.date === b.date ? 0 : (a.date ?? "~") < (b.date ?? "~") ? -1 : 1,
   );
 }
 
@@ -169,38 +347,64 @@ const ownedList = (userId: string, id: string) =>
 const owned = (userId: string, id: string) =>
   and(eq(tasks.userId, userId), eq(tasks.id, taskId.parse(id)));
 
+// why: stored rows and the occurrences they replace are read from one snapshot, or a concurrent save could hide an occurrence
+const snapshot = <T>(read: (tx: Transaction) => Promise<T>) =>
+  db.transaction(read, {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
+
 export async function listTasks(
   userId: string,
   input: z.input<typeof range>,
 ): Promise<Task[]> {
   const { from, to } = range.parse(input);
-  const rows = await db
-    .select(taskColumns)
-    .from(tasks)
-    .where(and(eq(tasks.userId, userId), between(tasks.date, from, to)))
-    .orderBy(...taskOrder);
-  return withChecklists(db, rows);
+  return snapshot(async (tx) =>
+    withOccurrences(
+      tx,
+      userId,
+      await tx
+        .select(taskColumns)
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            between(tasks.date, from, to),
+            isNull(tasks.deletedAt),
+          ),
+        )
+        .orderBy(...taskOrder),
+      from,
+      to,
+    ),
+  );
 }
 
 async function listsAndTheirTasks(userId: string, from: string, to: string) {
-  const [userLists, rows] = await Promise.all([
-    db
-      .select(listColumns)
-      .from(lists)
-      .where(eq(lists.userId, userId))
-      .orderBy(...listOrder),
-    db
-      .select(taskColumns)
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.userId, userId),
-          or(between(tasks.date, from, to), isNotNull(tasks.listId)),
-        ),
-      )
-      .orderBy(...taskOrder),
-  ]);
-  return { lists: userLists, tasks: await withChecklists(db, rows) };
+  return snapshot(async (tx) => {
+    const [userLists, rows] = await Promise.all([
+      tx
+        .select(listColumns)
+        .from(lists)
+        .where(eq(lists.userId, userId))
+        .orderBy(...listOrder),
+      tx
+        .select(taskColumns)
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            or(between(tasks.date, from, to), isNotNull(tasks.listId)),
+            isNull(tasks.deletedAt),
+          ),
+        )
+        .orderBy(...taskOrder),
+    ]);
+    return {
+      lists: userLists,
+      tasks: await withOccurrences(tx, userId, rows, from, to),
+    };
+  });
 }
 
 type TaskPlacement = z.output<typeof placement>;
@@ -231,7 +435,7 @@ export async function createTask(
       position: endOf(userId, placement),
     })
     .returning(taskColumns);
-  return toTask({ ...task, checklist: [] });
+  return toTask({ ...task, checklist: [] }, new Map());
 }
 
 export async function createList(
@@ -310,13 +514,207 @@ export async function deleteList(userId: string, id: string): Promise<boolean> {
   });
 }
 
+async function insertOccurrences(
+  tx: Transaction,
+  userId: string,
+  series: SeriesRow,
+  dates: string[],
+) {
+  if (!dates.length) return;
+  const rows = dates.map((date) => ({
+    id: occurrenceIdOf(series.id, date),
+    userId,
+    title: series.title,
+    notes: series.notes,
+    color: series.color,
+    date,
+    seriesId: series.id,
+    occurrence: date,
+    position: endOf(userId, { date }),
+  }));
+  await tx.insert(tasks).values(rows);
+  if (series.checklist.length)
+    await tx.insert(checklistItems).values(
+      rows.flatMap((row) =>
+        series.checklist.map((text, position) => ({
+          id: crypto.randomUUID(),
+          taskId: row.id,
+          text,
+          position,
+        })),
+      ),
+    );
+}
+
+async function materialize(
+  tx: Transaction,
+  userId: string,
+  id: string,
+): Promise<string | null> {
+  const ref = occurrenceId.exec(id);
+  if (!ref) return id;
+  const [, seriesId, date] = ref;
+  const [series] = await tx
+    .select()
+    .from(taskSeries)
+    .where(and(eq(taskSeries.userId, userId), eq(taskSeries.id, seriesId)))
+    .for("update");
+  if (!series) return null;
+  const rows = await tx
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(
+      or(
+        owned(userId, id),
+        and(eq(tasks.seriesId, seriesId), eq(tasks.occurrence, date)),
+      ),
+    );
+  if (rows.length) return rows.some((row) => row.id === id) ? id : null;
+  if (!occurrences(seriesOf(series), date, date).length) return null;
+  await insertOccurrences(tx, userId, series, [date]);
+  return id;
+}
+
+async function weekStartOf(tx: Transaction, userId: string) {
+  const [user] = await tx
+    .select({ weekStartsOn: users.weekStartsOn })
+    .from(users)
+    .where(eq(users.id, userId));
+  return user.weekStartsOn;
+}
+
+async function templateOf(
+  tx: Transaction,
+  task: Omit<TaskRecord, "checklist">,
+) {
+  const items = await tx
+    .select({ text: checklistItems.text })
+    .from(checklistItems)
+    .where(eq(checklistItems.taskId, task.id))
+    .orderBy(asc(checklistItems.position));
+  return {
+    title: task.title,
+    notes: task.notes,
+    color: task.color,
+    checklist: items.map((item) => item.text),
+  };
+}
+
+const endBefore = (tx: Transaction, series: SeriesRow, at: string) =>
+  tx
+    .update(taskSeries)
+    .set({ endsOn: addDays(at, -1) })
+    .where(
+      and(
+        eq(taskSeries.id, series.id),
+        or(isNull(taskSeries.endsOn), sql`${taskSeries.endsOn} >= ${at}`),
+      ),
+    );
+
+const fromOccurrence = (seriesId: string, at: string, inclusive: boolean) =>
+  and(
+    eq(tasks.seriesId, seriesId),
+    inclusive
+      ? sql`${tasks.occurrence} >= ${at}`
+      : sql`${tasks.occurrence} > ${at}`,
+  );
+
+async function release(
+  tx: Transaction,
+  seriesId: string,
+  after: string,
+  keepMoved: boolean,
+) {
+  const rows = fromOccurrence(seriesId, after, false);
+  const kept = keepMoved
+    ? sql`${tasks.deletedAt} is null and (${tasks.completedAt} is not null or ${tasks.date} is distinct from ${tasks.occurrence})`
+    : sql`${tasks.deletedAt} is null and ${tasks.completedAt} is not null`;
+  await tx.delete(tasks).where(and(rows, not(kept)));
+  await tx.update(tasks).set({ seriesId: null, occurrence: null }).where(rows);
+}
+
+async function startSeries(
+  tx: Transaction,
+  userId: string,
+  task: Omit<TaskRecord, "checklist">,
+  repeat: Repeat,
+) {
+  if (task.date === null) throw new Error("Only a dated task repeats");
+  const id = crypto.randomUUID();
+  await tx.insert(taskSeries).values({
+    id,
+    userId,
+    ...(await templateOf(tx, task)),
+    ...ruleColumns(repeat),
+    weekStartsOn: await weekStartOf(tx, userId),
+    anchor: task.date,
+    startsOn: task.date,
+  });
+  await tx
+    .update(tasks)
+    .set({ seriesId: id, occurrence: task.date })
+    .where(owned(userId, task.id));
+}
+
+async function splitSeries(
+  tx: Transaction,
+  userId: string,
+  task: Omit<TaskRecord, "checklist"> & {
+    seriesId: string;
+    occurrence: string;
+  },
+  repeat: Repeat | null | undefined,
+  fields: Partial<Pick<TaskRecord, "title" | "notes" | "color">>,
+) {
+  const at = task.occurrence;
+  const [old] = await tx
+    .select()
+    .from(taskSeries)
+    .where(eq(taskSeries.id, task.seriesId))
+    .for("update");
+  await endBefore(tx, old, at);
+  if (repeat !== undefined) {
+    await release(tx, old.id, at, true);
+    await tx
+      .update(tasks)
+      .set({ seriesId: null, occurrence: null })
+      .where(owned(userId, task.id));
+    if (repeat) await startSeries(tx, userId, task, repeat);
+    return;
+  }
+  const id = crypto.randomUUID();
+  await tx.insert(taskSeries).values({
+    id,
+    userId,
+    ...(await templateOf(tx, task)),
+    ...ruleColumns(repeatOf(old)),
+    weekStartsOn: old.weekStartsOn,
+    anchor: old.anchor,
+    startsOn: at > old.startsOn ? at : old.startsOn,
+  });
+  await tx
+    .update(tasks)
+    .set({ seriesId: id })
+    .where(fromOccurrence(old.id, at, true));
+  if (Object.values(fields).some((field) => field !== undefined))
+    await tx
+      .update(tasks)
+      .set(fields)
+      .where(fromOccurrence(id, at, false));
+}
+
 export async function updateTask(
   userId: string,
   id: string,
   input: TaskEdits,
+  inScope: Scope = "this",
 ): Promise<Task | null> {
-  const { completed, checklist, placement, ...fields } = edits.parse(input);
+  const { completed, checklist, placement, repeat, ...fields } =
+    edits.parse(input);
+  const following = scope.parse(inScope) === "following";
   return db.transaction(async (tx) => {
+    const target = await materialize(tx, userId, taskId.parse(id));
+    if (!target) return null;
     const [task] = await tx
       .update(tasks)
       .set({
@@ -327,7 +725,7 @@ export async function updateTask(
         // why: an edit of the checklist alone leaves nothing else to set, and drizzle refuses an empty set
         updatedAt: new Date(),
       })
-      .where(owned(userId, id))
+      .where(and(owned(userId, target), isNull(tasks.deletedAt)))
       .returning(taskColumns);
     if (!task) return null;
     if (placement?.index !== undefined) {
@@ -359,7 +757,21 @@ export async function updateTask(
           })),
         );
     }
-    const [read] = await withChecklists(tx, [task]);
+    const { seriesId, occurrence } = task;
+    if (seriesId !== null && occurrence !== null) {
+      if (following || repeat !== undefined)
+        await splitSeries(
+          tx,
+          userId,
+          { ...task, seriesId, occurrence },
+          repeat,
+          fields,
+        );
+    } else if (repeat) await startSeries(tx, userId, task, repeat);
+    const [read] = await withChecklists(
+      tx,
+      await tx.select(taskColumns).from(tasks).where(owned(userId, target)),
+    );
     return read;
   });
 }
@@ -375,12 +787,41 @@ function moveTo(userId: string, to: TaskPlacement) {
   };
 }
 
-export async function deleteTask(userId: string, id: string): Promise<boolean> {
-  const deleted = await db
-    .delete(tasks)
-    .where(owned(userId, id))
-    .returning({ id: tasks.id });
-  return deleted.length > 0;
+export async function deleteTask(
+  userId: string,
+  id: string,
+  inScope: Scope = "this",
+): Promise<boolean> {
+  const following = scope.parse(inScope) === "following";
+  return db.transaction(async (tx) => {
+    const target = await materialize(tx, userId, taskId.parse(id));
+    if (!target) return false;
+    const [task] = await tx
+      .select({ seriesId: tasks.seriesId, occurrence: tasks.occurrence })
+      .from(tasks)
+      .where(and(owned(userId, target), isNull(tasks.deletedAt)))
+      .for("update");
+    if (!task) return false;
+    if (task.seriesId === null)
+      await tx.delete(tasks).where(owned(userId, target));
+    else if (!following)
+      // why: the row stays as a mark, so the series does not bring the occurrence back
+      await tx
+        .update(tasks)
+        .set({ deletedAt: sql`now()` })
+        .where(owned(userId, target));
+    else {
+      const [series] = await tx
+        .select()
+        .from(taskSeries)
+        .where(eq(taskSeries.id, task.seriesId))
+        .for("update");
+      await endBefore(tx, series, task.occurrence!);
+      await tx.delete(tasks).where(owned(userId, target));
+      await release(tx, series.id, task.occurrence!, false);
+    }
+    return true;
+  });
 }
 
 export async function updateSettings(
@@ -391,23 +832,68 @@ export async function updateSettings(
 }
 
 async function rollOverUnfinishedTasks(userId: string, today: string) {
-  await db.execute(sql`
-    with moving as (
-      select ${tasks.id} as id,
-        row_number() over (order by ${tasks.date}, ${tasks.position}, ${tasks.id}) as n
-      from ${tasks}
-      where ${tasks.userId} = ${userId}
-        and ${tasks.date} < ${today}
-        and ${tasks.completedAt} is null
-    )
-    update ${tasks}
-    set date = ${today},
-      position = moving.n + (
-        select coalesce(max(position), -1) from ${tasks}
-        where user_id = ${userId} and date = ${today}
+  const yesterday = addDays(today, -1);
+  await db.transaction(async (tx) => {
+    const due = await tx
+      .select()
+      .from(taskSeries)
+      .where(
+        and(
+          eq(taskSeries.userId, userId),
+          sql`${taskSeries.startsOn} < ${today}`,
+          or(
+            isNull(taskSeries.endsOn),
+            sql`${taskSeries.endsOn} >= ${taskSeries.startsOn}`,
+          ),
+        ),
       )
-    from moving
-    where ${tasks.id} = moving.id`);
+      .for("update");
+    for (const series of due) {
+      const taken = new Set(
+        (
+          await tx
+            .select({ occurrence: tasks.occurrence })
+            .from(tasks)
+            .where(
+              and(
+                eq(tasks.seriesId, series.id),
+                between(tasks.occurrence, series.startsOn, yesterday),
+              ),
+            )
+        ).map((row) => row.occurrence),
+      );
+      await insertOccurrences(
+        tx,
+        userId,
+        series,
+        occurrences(seriesOf(series), series.startsOn, yesterday).filter(
+          (date) => !taken.has(date),
+        ),
+      );
+      await tx
+        .update(taskSeries)
+        .set({ startsOn: today })
+        .where(eq(taskSeries.id, series.id));
+    }
+    await tx.execute(sql`
+      with moving as (
+        select ${tasks.id} as id,
+          row_number() over (order by ${tasks.date}, ${tasks.position}, ${tasks.id}) as n
+        from ${tasks}
+        where ${tasks.userId} = ${userId}
+          and ${tasks.date} < ${today}
+          and ${tasks.completedAt} is null
+          and ${tasks.deletedAt} is null
+      )
+      update ${tasks}
+      set date = ${today},
+        position = moving.n + (
+          select coalesce(max(position), -1) from ${tasks}
+          where user_id = ${userId} and date = ${today}
+        )
+      from moving
+      where ${tasks.id} = moving.id`);
+  });
 }
 
 export async function readWeek(

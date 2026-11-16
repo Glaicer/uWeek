@@ -451,7 +451,8 @@ a.calendarRow:not([aria-current="true"]):focus {
 
 .band {
   display: grid;
-  grid-template-columns: 84px 1fr;
+  grid-template-columns: 84px minmax(0, 1fr);
+  min-width: 0;
   padding: 10px 0 18px;
   border-top: 1px solid var(--text);
 }
@@ -1157,7 +1158,7 @@ button.name {
   }
 
   .band {
-    grid-template-columns: 52px 1fr;
+    grid-template-columns: 52px minmax(0, 1fr);
   }
 
   .someday {
@@ -1167,4 +1168,64 @@ button.name {
   .someday .gutter {
     grid-row: auto;
   }
+}
+
+.quiet {
+  color: var(--secondary);
+}
+.missed {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+.repeatRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.repeatRow .dropdown {
+  flex: none;
+  min-width: 140px;
+}
+.every {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--secondary);
+  font-size: 14px;
+}
+.interval {
+  width: 64px;
+}
+.weekdays {
+  display: flex;
+  gap: 4px;
+}
+.weekdayToggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.weekdayToggle:hover {
+  border-color: var(--border-strong);
+}
+.weekdayToggle[aria-pressed="true"] {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--background);
+}
+.weekdayToggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

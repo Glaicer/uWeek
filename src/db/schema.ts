@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { WeekStart } from "../calendar";
 import { taskColorValues, type TaskColor } from "../model";
+import type { MonthEnd, Repeat, Weekday } from "../recurrence";
 
 const createdAt = () =>
   timestamp({ withTimezone: true }).defaultNow().notNull();
@@ -108,6 +109,46 @@ export const lists = pgTable(
   (table) => [unique("lists_user_id_id_unique").on(table.userId, table.id)],
 );
 
+export const taskSeries = pgTable(
+  "task_series",
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    notes: text().default("").notNull(),
+    color: text().$type<TaskColor>(),
+    checklist: text()
+      .array()
+      .default(sql`'{}'::text[]`)
+      .notNull(),
+    every: text().$type<Repeat["every"]>().notNull(),
+    interval: integer().notNull(),
+    weekdays: smallint().array().$type<Weekday[]>(),
+    monthEnd: text().$type<MonthEnd>(),
+    weekStartsOn: smallint().$type<WeekStart>().notNull(),
+    anchor: date({ mode: "string" }).notNull(),
+    startsOn: date({ mode: "string" }).notNull(),
+    endsOn: date({ mode: "string" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("task_series_user_id_id_unique").on(table.userId, table.id),
+    check("task_series_interval", sql`${table.interval} >= 1`),
+    check(
+      "task_series_rule",
+      sql`case ${table.every}
+        when 'day' then ${table.weekdays} is null and ${table.monthEnd} is null
+        when 'week' then cardinality(${table.weekdays}) > 0 and ${table.monthEnd} is null
+        when 'month' then ${table.weekdays} is null and ${table.monthEnd} in ('clamp', 'last', 'overflow')
+        when 'year' then ${table.weekdays} is null and ${table.monthEnd} is null
+        else false end`,
+    ),
+  ],
+);
+
 export const tasks = pgTable(
   "tasks",
   {
@@ -122,12 +163,31 @@ export const tasks = pgTable(
     notes: text().default("").notNull(),
     color: text().$type<TaskColor>(),
     completedAt: timestamp({ withTimezone: true }),
+    seriesId: text(),
+    occurrence: date({ mode: "string" }),
+    deletedAt: timestamp({ withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     index().on(table.userId, table.date),
     index().on(table.userId, table.listId),
+    unique("tasks_series_id_occurrence_unique").on(
+      table.seriesId,
+      table.occurrence,
+    ),
+    foreignKey({
+      columns: [table.userId, table.seriesId],
+      foreignColumns: [taskSeries.userId, taskSeries.id],
+    }).onDelete("cascade"),
+    check(
+      "tasks_series_occurrence",
+      sql`(${table.seriesId} is null) = (${table.occurrence} is null)`,
+    ),
+    check(
+      "tasks_deleted_occurrence",
+      sql`${table.deletedAt} is null or ${table.seriesId} is not null`,
+    ),
     // why: the user is part of the key, so a task can only sit in its owner's list
     foreignKey({
       columns: [table.userId, table.listId],

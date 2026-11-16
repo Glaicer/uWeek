@@ -25,12 +25,25 @@ import {
   type WeekStart,
 } from "../src/calendar";
 import { taskColorValues, type Placement, type TaskColor } from "../src/model";
-import type { ChecklistItem, Task, TaskEdits, TaskList } from "../src/planner";
+import type {
+  ChecklistItem,
+  Scope,
+  Task,
+  TaskEdits,
+  TaskList,
+} from "../src/planner";
+import {
+  monthEndChoice,
+  type MonthEnd,
+  type Repeat,
+  type Weekday,
+} from "../src/recurrence";
 import {
   createList,
   createTask,
   deleteList,
   deleteTask,
+  listTasks,
   moveList,
   renameList,
   saveTimeZone,
@@ -340,23 +353,122 @@ function DownIcon() {
   );
 }
 
+function RepeatIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M19.07 4.93c-.45-.45-.95-.86-1.48-1.22a9.6 9.6 0 0 0-1.7-.92c-.6-.25-1.24-.45-1.88-.58c-1.32-.27-2.71-.27-4.03 0c-.64.13-1.27.33-1.88.58a9.96 9.96 0 0 0-4.4 3.62a9.6 9.6 0 0 0-.92 1.7c-.25.6-.45 1.24-.58 1.88c-.13.66-.2 1.34-.2 2.01s.07 1.35.2 2.01c.13.64.33 1.27.58 1.88a9.96 9.96 0 0 0 3.62 4.4c.53.36 1.1.67 1.7.92s1.24.45 1.88.58c.66.13 1.34.2 2.01.2s1.35-.07 2.01-.2c.64-.13 1.27-.33 1.88-.58a9.96 9.96 0 0 0 4.4-3.62c.36-.53.67-1.1.92-1.7s.45-1.24.58-1.88c.13-.66.2-1.34.2-2.01h-2a7.85 7.85 0 0 1-.63 3.11c-.2.48-.45.93-.74 1.36c-.28.42-.61.82-.98 1.19c-.36.36-.76.69-1.18.98c-.43.29-.88.54-1.36.74s-.99.36-1.5.47a8 8 0 0 1-4.73-.47c-.48-.2-.93-.45-1.36-.74c-.42-.29-.82-.62-1.18-.98s-.69-.76-.98-1.19a8 8 0 0 1-.74-1.36c-.2-.48-.36-.99-.47-1.5A8 8 0 0 1 3.97 12a7.85 7.85 0 0 1 .63-3.11c.2-.48.45-.93.74-1.36c.29-.42.62-.82.98-1.18s.76-.69 1.18-.98c.43-.29.88-.54 1.36-.74s.99-.36 1.5-.47a8 8 0 0 1 4.73.47c.48.2.93.45 1.36.74c.42.29.82.62 1.18.98c.17.17.32.34.48.52L15.98 9h6V3l-2.45 2.45c-.15-.18-.31-.36-.48-.52Z"
+      />
+    </svg>
+  );
+}
+
 const colorName = (color: TaskColor) => color[0].toUpperCase() + color.slice(1);
+
+type AskScope = (
+  action: "Change" | "Delete",
+  title: string,
+) => Promise<Scope | null>;
+
+function useScopeQuestion(): [AskScope, ReactNode] {
+  const id = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const answer = useRef<((scope: Scope | null) => void) | null>(null);
+  const [question, setQuestion] = useState<{
+    action: "Change" | "Delete";
+    title: string;
+  }>();
+  const ask: AskScope = (action, title) =>
+    new Promise((resolve) => {
+      answer.current = resolve;
+      setQuestion({ action, title });
+      dialog.current?.showModal();
+    });
+  function reply(scope: Scope | null) {
+    const resolve = answer.current;
+    answer.current = null;
+    dialog.current?.close();
+    resolve?.(scope);
+  }
+  return [
+    ask,
+    <dialog
+      key="scope"
+      className={styles.confirm}
+      ref={dialog}
+      aria-labelledby={id}
+      onClose={() => reply(null)}
+    >
+      <p id={id}>
+        {question?.action} “{question?.title}”: only this task or this and the
+        following ones?
+      </p>
+      <div className={styles.confirmActions}>
+        <button
+          className={styles.tool}
+          type="button"
+          onClick={() => reply(null)}
+        >
+          Cancel
+        </button>
+        <button
+          className={styles.tool}
+          type="button"
+          autoFocus
+          onClick={() => reply("this")}
+        >
+          This task
+        </button>
+        <button
+          className={`${styles.tool} ${question?.action === "Delete" ? styles.destructive : styles.primary}`}
+          type="button"
+          onClick={() => reply("following")}
+        >
+          This and following
+        </button>
+      </div>
+    </dialog>,
+  ];
+}
 
 function TaskRow({
   task,
   onChanged,
   onDeleted,
+  onReload,
   onEdit,
+  askScope,
 }: {
   task: Task;
   onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
+  onReload: () => Promise<void>;
   onEdit: () => void;
+  askScope: AskScope;
 }) {
   const moverRef = useContext(Mover);
   const [completed, setCompleted] = useOptimistic(task.completed);
   const { save, alert } = useSave();
   const detailed = task.notes !== "" || task.checklist.length > 0;
+  const missed =
+    task.recurrence &&
+    task.date !== undefined &&
+    task.recurrence.occurrence !== task.date
+      ? `from ${dayMonth.format(localDate(task.recurrence.occurrence))}`
+      : undefined;
+
+  async function remove() {
+    const scope = task.recurrence
+      ? await askScope("Delete", task.title)
+      : "this";
+    if (!scope) return;
+    await save(async () => {
+      await deleteTask(task.id, scope);
+      if (scope === "following") await onReload();
+      else onDeleted(task.id);
+    });
+  }
 
   return (
     <div
@@ -378,7 +490,12 @@ function TaskRow({
         type="button"
         aria-pressed={completed}
         aria-description={
-          [task.color && colorName(task.color), detailed && "Has details"]
+          [
+            task.color && colorName(task.color),
+            detailed && "Has details",
+            task.recurrence && "Repeats",
+            missed,
+          ]
             .filter(Boolean)
             .join(", ") || undefined
         }
@@ -397,6 +514,16 @@ function TaskRow({
           </span>
         )}
         <span className={styles.label}>{task.title}</span>
+        {task.recurrence && (
+          <span className={`${styles.mark} ${styles.quiet}`} aria-hidden="true">
+            <RepeatIcon />
+          </span>
+        )}
+        {missed && (
+          <span className={styles.missed} aria-hidden="true">
+            ({missed})
+          </span>
+        )}
       </button>
       {alert}
       <button
@@ -411,12 +538,7 @@ function TaskRow({
         className={styles.action}
         type="button"
         aria-label={`Delete ${task.title}`}
-        onClick={() =>
-          save(async () => {
-            await deleteTask(task.id);
-            onDeleted(task.id);
-          })
-        }
+        onClick={remove}
       >
         ×
       </button>
@@ -1078,6 +1200,187 @@ interface Details {
   color: TaskColor | null;
   checklist: ChecklistItem[];
   placement: Placement;
+  repeat: Repeat | null;
+}
+
+const fullWeekday = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
+const frequencies = [
+  { value: "never", label: "Never" },
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+  { value: "year", label: "Yearly" },
+] as const;
+type Frequency = (typeof frequencies)[number]["value"];
+
+function ordinal(day: number): string {
+  const tens = day % 100;
+  const suffix =
+    tens >= 11 && tens <= 13
+      ? "th"
+      : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th");
+  return `${day}${suffix}`;
+}
+
+function monthEndOptions(date: string): { value: MonthEnd; label: string }[] {
+  const choice = monthEndChoice(date);
+  if (choice === "31st")
+    return [
+      { value: "last", label: "Last day of shorter months" },
+      { value: "overflow", label: "1st of the next month" },
+    ];
+  if (choice === "last day")
+    return [
+      { value: "clamp", label: `The ${ordinal(Number(date.slice(8)))}` },
+      { value: "last", label: "The last day of the month" },
+    ];
+  return [];
+}
+
+function repeatOn(repeat: Repeat, date: string): Repeat {
+  if (repeat.every !== "month") return repeat;
+  const options = monthEndOptions(date).map((option) => option.value);
+  if (options.includes(repeat.monthEnd)) return repeat;
+  return { ...repeat, monthEnd: options[0] ?? "clamp" };
+}
+
+function startRepeat(
+  every: Repeat["every"],
+  date: string,
+  from: Repeat | null,
+): Repeat {
+  const base = { interval: from?.interval ?? 1, until: from?.until ?? null };
+  if (every === "week")
+    return { ...base, every, weekdays: [localDate(date).getDay() as Weekday] };
+  if (every === "month")
+    return repeatOn({ ...base, every, monthEnd: "clamp" }, date);
+  return { ...base, every };
+}
+
+function sameRepeat(a: Repeat | null, b: Repeat | null): boolean {
+  if (!a || !b) return a === b;
+  return (
+    a.every === b.every &&
+    a.interval === b.interval &&
+    a.until === b.until &&
+    (a.every !== "week" ||
+      (b.every === "week" && a.weekdays.join() === b.weekdays.join())) &&
+    (a.every !== "month" || (b.every === "month" && a.monthEnd === b.monthEnd))
+  );
+}
+
+function RepeatField({
+  date,
+  repeat,
+  weekStartsOn,
+  onChange,
+}: {
+  date: string;
+  repeat: Repeat | null;
+  weekStartsOn: WeekStart;
+  onChange: (repeat: Repeat | null) => void;
+}) {
+  const frequencyList = useRef<HTMLDivElement>(null);
+  const monthEndList = useRef<HTMLDivElement>(null);
+  const shortMonths = monthEndOptions(date);
+  const weekdays = Array.from(
+    { length: 7 },
+    (_, offset) => ((offset + weekStartsOn) % 7) as Weekday,
+  );
+  const shortMonthsLabel =
+    monthEndChoice(date) === "31st" ? "In shorter months" : "Repeat on";
+
+  return (
+    <div className={styles.cardField}>
+      <span className={styles.cardLabel}>Repeat</span>
+      <div className={styles.repeatRow}>
+        <Dropdown<Frequency>
+          label="Repeat"
+          list={frequencyList}
+          value={repeat?.every ?? "never"}
+          options={[...frequencies]}
+          onChange={(next) =>
+            onChange(next === "never" ? null : startRepeat(next, date, repeat))
+          }
+        />
+        {repeat && (
+          <label className={styles.every}>
+            Every
+            <input
+              className={`${styles.dateInput} ${styles.interval}`}
+              type="number"
+              aria-label="Interval"
+              min={1}
+              max={999}
+              value={repeat.interval}
+              onChange={(event) => {
+                const interval = Number(event.target.value);
+                if (
+                  Number.isInteger(interval) &&
+                  interval >= 1 &&
+                  interval <= 999
+                )
+                  onChange({ ...repeat, interval });
+              }}
+            />
+            {repeat.interval === 1 ? repeat.every : `${repeat.every}s`}
+          </label>
+        )}
+      </div>
+      {repeat?.every === "week" && (
+        <div className={styles.weekdays} role="group" aria-label="Weekdays">
+          {weekdays.map((day) => {
+            const name = fullWeekday.format(new Date(2026, 10, 15 + day));
+            const on = repeat.weekdays.includes(day);
+            return (
+              <button
+                key={day}
+                className={styles.weekdayToggle}
+                type="button"
+                aria-label={name}
+                aria-pressed={on}
+                onClick={() => {
+                  const next = on
+                    ? repeat.weekdays.filter((other) => other !== day)
+                    : [...repeat.weekdays, day].sort();
+                  if (next.length) onChange({ ...repeat, weekdays: next });
+                }}
+              >
+                {name.slice(0, 2)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {repeat?.every === "month" && shortMonths.length > 0 && (
+        <div className={styles.repeatRow}>
+          <span className={styles.every}>{shortMonthsLabel}</span>
+          <Dropdown<MonthEnd>
+            label={shortMonthsLabel}
+            list={monthEndList}
+            value={repeat.monthEnd}
+            options={shortMonths}
+            onChange={(monthEnd) => onChange({ ...repeat, monthEnd })}
+          />
+        </div>
+      )}
+      {repeat && (
+        <label className={`${styles.repeatRow} ${styles.every}`}>
+          Until
+          <input
+            className={styles.dateInput}
+            type="date"
+            aria-label="Until"
+            min={date}
+            value={repeat.until ?? ""}
+            onChange={(event) =>
+              onChange({ ...repeat, until: event.target.value || null })
+            }
+          />
+        </label>
+      )}
+    </div>
+  );
 }
 
 function changesOf(task: Task, details: Details): TaskEdits | null {
@@ -1093,6 +1396,15 @@ function changesOf(task: Task, details: Details): TaskEdits | null {
     edits.checklist = checklist;
   if (placeOf(details.placement) !== placeOf(task))
     edits.placement = details.placement;
+  const date = details.placement.date;
+  if (
+    date !== undefined &&
+    details.repeat !== (task.recurrence?.repeat ?? null)
+  ) {
+    const repeat = details.repeat && repeatOn(details.repeat, date);
+    if (!sameRepeat(repeat, task.recurrence?.repeat ?? null))
+      edits.repeat = repeat;
+  }
   return Object.keys(edits).length ? edits : null;
 }
 
@@ -1100,15 +1412,21 @@ function TaskCard({
   task,
   lists,
   today,
+  weekStartsOn,
+  askScope,
   onSaved,
   onDeleted,
+  onReload,
   onClose,
 }: {
   task: Task;
   lists: TaskList[];
   today: string;
+  weekStartsOn: WeekStart;
+  askScope: AskScope;
   onSaved: (task: Task) => void;
   onDeleted: (id: string) => void;
+  onReload: () => Promise<void>;
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -1120,6 +1438,7 @@ function TaskCard({
     checklist: task.checklist,
     placement:
       task.date !== undefined ? { date: task.date } : { listId: task.listId },
+    repeat: task.recurrence?.repeat ?? null,
   }));
   const [newItem, setNewItem] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1176,10 +1495,34 @@ function TaskCard({
     if (done) finish();
   }
 
-  function close() {
+  async function close() {
     const edits = changesOf(task, withNewItem());
     if (!edits) return finish();
-    work(async () => onSaved(await updateTask(task.id, edits)));
+    const template = (["title", "notes", "color", "checklist"] as const).some(
+      (field) => edits[field] !== undefined,
+    );
+    const scope =
+      task.recurrence && edits.repeat === undefined && template
+        ? await askScope("Change", task.title)
+        : "this";
+    if (!scope) return;
+    work(async () => {
+      const saved = await updateTask(task.id, edits, scope);
+      if (scope === "following" || edits.repeat !== undefined) await onReload();
+      else onSaved(saved);
+    });
+  }
+
+  async function remove() {
+    const scope = task.recurrence
+      ? await askScope("Delete", task.title)
+      : "this";
+    if (!scope) return;
+    work(async () => {
+      await deleteTask(task.id, scope);
+      if (scope === "following") await onReload();
+      else onDeleted(task.id);
+    });
   }
 
   function addItem() {
@@ -1260,6 +1603,14 @@ function TaskCard({
             )}
           </div>
         </div>
+        {details.placement.date && (
+          <RepeatField
+            date={details.placement.date}
+            repeat={details.repeat}
+            weekStartsOn={weekStartsOn}
+            onChange={(repeat) => set({ repeat })}
+          />
+        )}
         <fieldset className={styles.cardField}>
           <legend className={styles.cardLabel}>Color</legend>
           <div className={styles.colors}>
@@ -1361,12 +1712,7 @@ function TaskCard({
             className={`${styles.tool} ${styles.deleteTask}`}
             type="button"
             disabled={busy}
-            onClick={() =>
-              work(async () => {
-                await deleteTask(task.id);
-                onDeleted(task.id);
-              })
-            }
+            onClick={remove}
           >
             Delete task
           </button>
@@ -1458,6 +1804,14 @@ export function Week({
   const remove = (id: string) =>
     setTasks((tasks) => tasks.filter((t) => t.id !== id));
   const { save, alert } = useSave();
+  const [askScope, scopeQuestion] = useScopeQuestion();
+  async function reload() {
+    const fresh = await listTasks(dates[0], dates[6]);
+    setTasks((tasks) => [
+      ...tasks.filter((task) => task.date === undefined),
+      ...fresh,
+    ]);
+  }
   const moverRef = useContext(Mover);
   function move(task: Task, place: string, index: number) {
     const placement: Placement = dates.includes(place)
@@ -1512,7 +1866,9 @@ export function Week({
           task={task}
           onChanged={replace}
           onDeleted={remove}
+          onReload={reload}
           onEdit={() => setOpenId(task.id)}
+          askScope={askScope}
         />
       )),
       ...draftsByPlace[index].map((draft) => (
@@ -1661,11 +2017,15 @@ export function Week({
           task={opened}
           lists={lists}
           today={today}
+          weekStartsOn={weekStartsOn}
+          askScope={askScope}
           onSaved={replace}
           onDeleted={remove}
+          onReload={reload}
           onClose={() => setOpenId(null)}
         />
       )}
+      {scopeQuestion}
     </main>
   );
 }

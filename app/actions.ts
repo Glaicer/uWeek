@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { auth } from "../src/auth";
 import * as planner from "../src/planner";
 import type { Placement } from "../src/model";
-import type { Task, TaskEdits, TaskList } from "../src/planner";
+import type { Scope, Task, TaskEdits, TaskList } from "../src/planner";
 
 export type SignInState =
   | { status: "idle" }
@@ -72,15 +72,31 @@ export async function createTask(
   return planner.createTask(await currentUserId(), { title, ...placement });
 }
 
-export async function updateTask(id: string, edits: TaskEdits): Promise<Task> {
-  const task = await planner.updateTask(await currentUserId(), id, edits);
+export async function updateTask(
+  id: string,
+  edits: TaskEdits,
+  scope: Scope = "this",
+): Promise<Task> {
+  const task = await planner.updateTask(
+    await currentUserId(),
+    id,
+    edits,
+    scope,
+  );
   if (!task) throw new Error("Task not found");
   return task;
 }
 
-export async function deleteTask(id: string): Promise<void> {
-  if (!(await planner.deleteTask(await currentUserId(), id)))
+export async function deleteTask(
+  id: string,
+  scope: Scope = "this",
+): Promise<void> {
+  if (!(await planner.deleteTask(await currentUserId(), id, scope)))
     throw new Error("Task not found");
+}
+
+export async function listTasks(from: string, to: string): Promise<Task[]> {
+  return planner.listTasks(await currentUserId(), { from, to });
 }
 
 export async function createList(title: string): Promise<TaskList> {
