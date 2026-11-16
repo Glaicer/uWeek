@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 export interface DragOptions {
-  zones: string;
+  zone: string;
   axis: "x" | "y";
   ghost: string;
   onDrop: (zone: HTMLElement, index: number) => void;
@@ -11,6 +11,7 @@ const mouseThreshold = 4;
 const touchDelay = 300;
 const touchTolerance = 8;
 const edge = 48;
+const pressRepeat = 1000;
 let active = false;
 
 // why: iOS Safari only lets a touchmove listener stop scrolling if it was there before the touch began
@@ -29,10 +30,11 @@ function itemsOf(zone: Element): HTMLElement[] {
 
 export function startDrag(
   event: ReactPointerEvent<HTMLElement>,
-  { zones, axis, ghost: ghostClass, onDrop }: DragOptions,
+  { zone: name, axis, ghost: ghostClass, onDrop }: DragOptions,
 ): void {
   if (active || !event.isPrimary || event.button !== 0) return;
   const item = event.currentTarget;
+  const zones = `[data-zone="${name}"]`;
   const touch = event.pointerType === "touch";
   const start = { x: event.clientX, y: event.clientY };
   const home = item.closest<HTMLElement>(zones);
@@ -44,6 +46,8 @@ export function startDrag(
   let marked: HTMLElement | null = null;
   let frame = 0;
   let armed = false;
+  let pressed: HTMLElement | null = null;
+  let pressedAt = 0;
   const timer = touch ? setTimeout(begin, touchDelay) : 0;
 
   function begin() {
@@ -61,9 +65,8 @@ export function startDrag(
     ghost.style.height = `${box.height}px`;
     document.body.append(ghost);
     item.dataset.dragging = "";
-    document.documentElement.dataset.dragging = "";
-    follow();
-    frame = requestAnimationFrame(scroll);
+    document.documentElement.dataset.dragging = name;
+    frame = requestAnimationFrame(tick);
   }
 
   function mark(element: HTMLElement | null, side?: string) {
@@ -75,14 +78,17 @@ export function startDrag(
   function follow() {
     if (!ghost) return;
     ghost.style.transform = `translate(${pointer.x - offset.x}px, ${pointer.y - offset.y}px)`;
-    const zone = document
-      .elementFromPoint(pointer.x, pointer.y)
-      ?.closest<HTMLElement>(zones);
+    const under = document.elementFromPoint(pointer.x, pointer.y);
+    press(under?.closest<HTMLElement>("[data-drag-press]") ?? null);
+    const zone = under?.closest<HTMLElement>(zones);
     if (!zone) {
       target = null;
       return mark(null);
     }
-    const others = itemsOf(zone).filter((other) => other !== item);
+    // why: a flipped week renders new rows, so the picked-up item is known by its id, not its element
+    const others = itemsOf(zone).filter(
+      (other) => other.dataset.item !== item.dataset.item,
+    );
     const coordinate = axis === "x" ? pointer.x : pointer.y;
     const index = others.filter((other) => {
       const box = other.getBoundingClientRect();
@@ -96,7 +102,21 @@ export function startDrag(
     else mark(zone, "start");
   }
 
-  function scroll() {
+  function press(element: HTMLElement | null) {
+    if (pressed && pressed !== element) delete pressed.dataset.pressing;
+    if (!element) {
+      pressed = null;
+      pressedAt = 0;
+      return;
+    }
+    element.dataset.pressing = "";
+    if (element === pressed || Date.now() - pressedAt < pressRepeat) return;
+    pressed = element;
+    pressedAt = Date.now();
+    element.click();
+  }
+
+  function tick() {
     // why: a row picked up near the window's edge would scroll the page before the pointer moves
     armed ||= pointer.y >= edge && pointer.y <= innerHeight - edge;
     const speed = !armed
@@ -106,11 +126,9 @@ export function startDrag(
         : pointer.y > innerHeight - edge
           ? (pointer.y - innerHeight + edge) / 3
           : 0;
-    if (speed) {
-      scrollBy(0, speed);
-      follow();
-    }
-    frame = requestAnimationFrame(scroll);
+    if (speed) scrollBy(0, speed);
+    follow();
+    frame = requestAnimationFrame(tick);
   }
 
   function onMove(move: PointerEvent) {
@@ -150,6 +168,7 @@ export function startDrag(
     removeEventListener("contextmenu", onContextMenu);
     removeEventListener("blur", onCancel);
     mark(null);
+    press(null);
     if (!ghost) return;
     ghost.remove();
     delete item.dataset.dragging;

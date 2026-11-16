@@ -5,7 +5,7 @@ import { validCalendarDate } from "../src/calendar";
 import { readWeek } from "../src/planner";
 import { setWeekStart, signOut } from "./actions";
 import { requestTime } from "./clock";
-import { DetectTimeZone, KeepSelectedList, Week } from "./week";
+import { DetectTimeZone, KeepAcrossWeeks, Week } from "./week";
 import styles from "./week.module.css";
 
 const weekStarts = [
@@ -29,7 +29,7 @@ export default async function WeekPage({
   const view = await readWeek(session.user.id, { week }, await requestTime());
   if (!view.timeZone) return <DetectTimeZone />;
   return (
-    <KeepSelectedList>
+    <KeepAcrossWeeks>
       <Week
         key={`${view.dates[0]} ${view.today}`}
         today={view.today}
@@ -76,6 +76,6 @@ export default async function WeekPage({
           </>
         }
       />
-    </KeepSelectedList>
+    </KeepAcrossWeeks>
   );
 }

@@ -347,14 +347,13 @@ function TaskRow({
   onChanged,
   onDeleted,
   onEdit,
-  onMove,
 }: {
   task: Task;
   onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
   onEdit: () => void;
-  onMove: (place: string, index: number) => void;
 }) {
+  const moverRef = useContext(Mover);
   const [completed, setCompleted] = useOptimistic(task.completed);
   const { save, alert } = useSave();
   const detailed = task.notes !== "" || task.checklist.length > 0;
@@ -366,10 +365,11 @@ function TaskRow({
       data-item={task.id}
       onPointerDown={(event) =>
         startDrag(event, {
-          zones: '[data-zone="tasks"]',
+          zone: "tasks",
           axis: "y",
           ghost: styles.ghost,
-          onDrop: (zone, index) => onMove(zone.dataset.place!, index),
+          onDrop: (zone, index) =>
+            moverRef.current?.(task, zone.dataset.place!, index),
         })
       }
     >
@@ -797,9 +797,17 @@ const SelectedList = createContext<[string | undefined, (id: string) => void]>([
   () => {},
 ]);
 
-export function KeepSelectedList({ children }: { children: ReactNode }) {
+type Move = (task: Task, place: string, index: number) => void;
+const Mover = createContext<RefObject<Move | null>>({ current: null });
+
+export function KeepAcrossWeeks({ children }: { children: ReactNode }) {
   const selected = useState<string>();
-  return <SelectedList value={selected}>{children}</SelectedList>;
+  const moverRef = useRef<Move>(null);
+  return (
+    <SelectedList value={selected}>
+      <Mover value={moverRef}>{children}</Mover>
+    </SelectedList>
+  );
 }
 
 function CogIcon() {
@@ -961,7 +969,7 @@ function ListTabs({
               onPointerDown={(event) =>
                 !busy &&
                 startDrag(event, {
-                  zones: '[data-zone="lists"]',
+                  zone: "lists",
                   axis: "x",
                   ghost: styles.ghost,
                   onDrop: (_, index) => reorder(list, index),
@@ -1450,6 +1458,7 @@ export function Week({
   const remove = (id: string) =>
     setTasks((tasks) => tasks.filter((t) => t.id !== id));
   const { save, alert } = useSave();
+  const moverRef = useContext(Mover);
   function move(task: Task, place: string, index: number) {
     const placement: Placement = dates.includes(place)
       ? { date: place }
@@ -1473,6 +1482,9 @@ export function Week({
       }
     });
   }
+  useEffect(() => {
+    moverRef.current = move;
+  });
   const discard = (draft: Draft) =>
     setDrafts((drafts) => drafts.filter((d) => d.id !== draft.id));
   async function saveDraft(draft: Draft) {
@@ -1501,7 +1513,6 @@ export function Week({
           onChanged={replace}
           onDeleted={remove}
           onEdit={() => setOpenId(task.id)}
-          onMove={(place, index) => move(task, place, index)}
         />
       )),
       ...draftsByPlace[index].map((draft) => (
@@ -1577,6 +1588,22 @@ export function Week({
           </Tool>
         </nav>
       </header>
+      <div
+        className={`${styles.flip} ${styles.previous}`}
+        data-drag-press
+        aria-hidden="true"
+        onClick={() => router.push(previousWeek, { scroll: false })}
+      >
+        ‹
+      </div>
+      <div
+        className={`${styles.flip} ${styles.next}`}
+        data-drag-press
+        aria-hidden="true"
+        onClick={() => router.push(nextWeek, { scroll: false })}
+      >
+        ›
+      </div>
       <div className={styles.spread}>
         {days.map((date, index) => {
           const key = dates[index];

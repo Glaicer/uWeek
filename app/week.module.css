@@ -753,6 +753,38 @@ button.name {
   pointer-events: none;
 }
 
+.flip {
+  display: none;
+  position: fixed;
+  z-index: 5;
+  top: 50%;
+  width: 40px;
+  height: 160px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--secondary);
+  font-size: 24px;
+  translate: 0 -50%;
+}
+
+:global(html[data-dragging="tasks"]) .flip {
+  display: grid;
+}
+
+.flip[data-pressing] {
+  background: var(--accent);
+  color: var(--background);
+}
+
+.previous {
+  left: 8px;
+}
+
+.next {
+  right: 8px;
+}
+
 .task[data-insert]::after,
 .rows[data-insert]::after {
   content: "";

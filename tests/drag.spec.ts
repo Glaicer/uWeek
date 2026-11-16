@@ -15,6 +15,8 @@ const titles = (place: Locator) =>
     name: /^(?!Add task$|Edit |Delete |New list$|Edit lists$)/,
   });
 
+const task = (place: Locator, name: string) =>
+  place.getByRole("button", { name, exact: true });
 const saved = (page: Page) =>
   page.waitForResponse((response) => response.request().method() === "POST");
 
@@ -69,8 +71,6 @@ test("a user drags tasks within a day, between days and through a list, and find
   const today = region(page, "14 Today");
   const sunday = region(page, "15 Sun");
   const someday = region(page, "Someday");
-  const task = (place: Locator, name: string) =>
-    place.getByRole("button", { name, exact: true });
   await addTasks(sunday, ["Gym", "Milk", "Call"]);
 
   const gym = await task(sunday, "Gym").boundingBox();
@@ -108,6 +108,52 @@ test("a user drags tasks within a day, between days and through a list, and find
     await expect(titles(sunday)).toHaveCount(0);
     await expect(titles(someday)).toHaveCount(0);
   }
+});
+
+test("while dragging, a user flips weeks at the window's edge, one week per pause, and drops the task in a later week", async ({
+  page,
+}) => {
+  const week = page.getByRole("heading", { level: 1 });
+  const sunday = region(page, "15 Sun");
+  const someday = region(page, "Someday");
+  await addTasks(sunday, ["Gym", "Milk"]);
+  await addTasks(someday, ["Paint"]);
+  const edge = { x: page.viewportSize()!.width - 12, y: 450 };
+
+  const from = await point(task(sunday, "Milk"), "left");
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(edge.x, edge.y, { steps: 12 });
+  await expect(week).toHaveText("Week 47");
+  const flipped = Date.now();
+  await expect(week).toHaveText("Week 48");
+  expect(Date.now() - flipped).toBeGreaterThan(700);
+  const monday = region(page, "23 Mon");
+  const to = await point(monday.getByRole("button", { name: "Add task" }));
+  await page.mouse.move(to.x, to.y, { steps: 12 });
+  await page.waitForTimeout(1500);
+  await expect(week).toHaveText("Week 48");
+  await Promise.all([saved(page), page.mouse.up()]);
+  await expect(titles(monday)).toHaveText(["Milk"]);
+
+  const paint = await point(task(someday, "Paint"), "left");
+  await page.mouse.move(paint.x, paint.y);
+  await page.mouse.down();
+  await page.mouse.move(12, edge.y, { steps: 12 });
+  await expect(week).toHaveText("Week 47");
+  const tuesday = region(page, "17 Tue");
+  const back = await point(tuesday.getByRole("button", { name: "Add task" }));
+  await page.mouse.move(back.x, back.y, { steps: 12 });
+  await Promise.all([saved(page), page.mouse.up()]);
+  await expect(titles(tuesday)).toHaveText(["Paint"]);
+  await expect(titles(someday)).toHaveCount(0);
+
+  await page.goto("/?week=2026-11-23");
+  await expect(titles(region(page, "23 Mon"))).toHaveText(["Milk"]);
+  await page.goto("/");
+  await expect(titles(sunday)).toHaveText(["Gym"]);
+  await expect(titles(someday)).toHaveCount(0);
+  await expect(titles(region(page, "16 Mon"))).toHaveCount(0);
 });
 
 test("a user drags a list tab to reorder the lists, and finds the order after a reload", async ({
