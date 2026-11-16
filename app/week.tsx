@@ -1291,7 +1291,7 @@ function RepeatField({
     monthEndChoice(date) === "31st" ? "In shorter months" : "Repeat on";
 
   return (
-    <div className={styles.cardField}>
+    <div className={`${styles.cardField} ${styles.repeatField}`}>
       <span className={styles.cardLabel}>Repeat</span>
       <div className={styles.repeatRow}>
         <Dropdown<Frequency>

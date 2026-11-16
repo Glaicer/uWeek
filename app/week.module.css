@@ -1181,6 +1181,9 @@ button.name {
   font-size: 12px;
   text-overflow: ellipsis;
 }
+.repeatField > :nth-child(n + 3) {
+  margin-top: 6px;
+}
 .repeatRow {
   display: flex;
   flex-wrap: wrap;
