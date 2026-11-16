@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -23,8 +24,8 @@ import {
   weekNumber,
   type WeekStart,
 } from "../src/calendar";
-import type { Placement } from "../src/model";
-import type { Task, TaskEdits, TaskList } from "../src/planner";
+import { taskColorValues, type Placement, type TaskColor } from "../src/model";
+import type { ChecklistItem, Task, TaskEdits, TaskList } from "../src/planner";
 import {
   createList,
   createTask,
@@ -287,14 +288,62 @@ function CalendarIcon() {
   );
 }
 
+function NotesIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M4 11h12v2H4zm0-5h16v2H4zm0 12h7.235v-2H4z"
+      />
+    </svg>
+  );
+}
+
+function DetailsIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 10c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2m6 0c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2M6 10c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2"
+      />
+    </svg>
+  );
+}
+
+function UpIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M11 8.414V18h2V8.414l4.293 4.293l1.414-1.414L12 4.586l-6.707 6.707l1.414 1.414z"
+      />
+    </svg>
+  );
+}
+
+function DownIcon() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="m18.707 12.707l-1.414-1.414L13 15.586V6h-2v9.586l-4.293-4.293l-1.414 1.414L12 19.414z"
+      />
+    </svg>
+  );
+}
+
+const colorName = (color: TaskColor) => color[0].toUpperCase() + color.slice(1);
+
 function TaskRow({
   task,
   onChanged,
   onDeleted,
+  onOpen,
 }: {
   task: Task;
   onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
+  onOpen: () => void;
 }) {
   const [renamed, setRenamed] = useState<string | null>(null);
   const [completed, setCompleted] = useOptimistic(task.completed);
@@ -311,13 +360,19 @@ function TaskRow({
 
   return (
     <div
-      className={`${styles.row} ${styles.task} ${completed ? styles.done : ""}`}
+      className={`${styles.row} ${styles.task} ${styles.tinted} ${completed ? styles.done : ""}`}
+      data-color={task.color ?? undefined}
     >
       {renamed === null ? (
         <button
           className={styles.name}
           type="button"
           aria-pressed={completed}
+          aria-description={
+            [task.color && colorName(task.color), task.notes && "Has notes"]
+              .filter(Boolean)
+              .join(", ") || undefined
+          }
           onClick={() =>
             startTransition(async () => {
               setCompleted(!completed);
@@ -325,7 +380,12 @@ function TaskRow({
             })
           }
         >
-          {task.title}
+          <span className={styles.label}>{task.title}</span>
+          {task.notes && (
+            <span className={styles.mark}>
+              <NotesIcon />
+            </span>
+          )}
         </button>
       ) : (
         <TitleInput
@@ -337,6 +397,15 @@ function TaskRow({
         />
       )}
       {alert}
+      <button
+        className={styles.action}
+        type="button"
+        aria-label={`Open ${task.title}`}
+        title="Details"
+        onClick={onOpen}
+      >
+        <DetailsIcon />
+      </button>
       <button
         className={styles.action}
         type="button"
@@ -431,7 +500,7 @@ function focusSelected(list: HTMLElement) {
     selected.offsetTop - (list.clientHeight - selected.offsetHeight) / 2;
 }
 
-function Dropdown({
+function Dropdown<Value extends string | number>({
   label,
   shortcut,
   value,
@@ -440,18 +509,18 @@ function Dropdown({
   onChange,
 }: {
   label: string;
-  shortcut: string;
-  value: number;
-  options: { value: number; label: string }[];
+  shortcut?: string;
+  value: Value;
+  options: { value: Value; label: string }[];
   list: RefObject<HTMLDivElement | null>;
-  onChange: (value: number) => void;
+  onChange: (value: Value) => void;
 }) {
   const id = useId();
   const anchor = `--dropdown${id}`;
   const button = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
 
-  function choose(next: number) {
+  function choose(next: Value) {
     list.current?.hidePopover();
     button.current?.focus();
     onChange(next);
@@ -483,7 +552,7 @@ function Dropdown({
         role="combobox"
         aria-label={label}
         aria-keyshortcuts={shortcut}
-        title={`${label} (${shortcut})`}
+        title={shortcut ? `${label} (${shortcut})` : label}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={id}
@@ -696,7 +765,7 @@ function shortcutAllowed(event: globalThis.KeyboardEvent): boolean {
     (target instanceof HTMLElement &&
       (target.isContentEditable ||
         target.closest("input, textarea, select"))) ||
-    document.querySelector(":popover-open")
+    document.querySelector(":popover-open, dialog[open]")
   );
 }
 
@@ -974,6 +1043,319 @@ function ListTabs({
   );
 }
 
+interface Details {
+  title: string;
+  notes: string;
+  color: TaskColor | null;
+  checklist: ChecklistItem[];
+  placement: Placement;
+}
+
+function changesOf(task: Task, details: Details): TaskEdits | null {
+  const edits: TaskEdits = {};
+  const title = details.title.trim();
+  if (title && title !== task.title) edits.title = title;
+  if (details.notes !== task.notes) edits.notes = details.notes;
+  if (details.color !== task.color) edits.color = details.color;
+  const checklist = details.checklist
+    .map((item) => ({ ...item, text: item.text.trim() }))
+    .filter((item) => item.text);
+  if (JSON.stringify(checklist) !== JSON.stringify(task.checklist))
+    edits.checklist = checklist;
+  if (placeOf(details.placement) !== placeOf(task))
+    edits.placement = details.placement;
+  return Object.keys(edits).length ? edits : null;
+}
+
+function TaskCard({
+  task,
+  lists,
+  today,
+  onSaved,
+  onDeleted,
+  onClose,
+}: {
+  task: Task;
+  lists: TaskList[];
+  today: string;
+  onSaved: (task: Task) => void;
+  onDeleted: (id: string) => void;
+  onClose: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const placeList = useRef<HTMLDivElement>(null);
+  const [details, setDetails] = useState<Details>(() => ({
+    title: task.title,
+    notes: task.notes,
+    color: task.color,
+    checklist: task.checklist,
+    placement:
+      task.date !== undefined ? { date: task.date } : { listId: task.listId },
+  }));
+  const [newItem, setNewItem] = useState("");
+  const [busy, setBusy] = useState(false);
+  const { save, alert } = useSave();
+  const dirty = newItem.trim() !== "" || changesOf(task, details) !== null;
+  const withNewItem = (): Details =>
+    newItem.trim()
+      ? {
+          ...details,
+          checklist: [
+            ...details.checklist,
+            { id: crypto.randomUUID(), text: newItem, completed: false },
+          ],
+        }
+      : details;
+
+  useEffect(() => dialog.current?.showModal(), []);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const set = (change: Partial<Details>) =>
+    setDetails((details) => ({ ...details, ...change }));
+  const setItems = (change: (items: ChecklistItem[]) => ChecklistItem[]) =>
+    setDetails((details) => ({
+      ...details,
+      checklist: change(details.checklist),
+    }));
+  const changeItem = (id: string, change: Partial<ChecklistItem>) =>
+    setItems((items) =>
+      items.map((item) => (item.id === id ? { ...item, ...change } : item)),
+    );
+  function moveItem(from: number, step: number) {
+    setItems((items) => {
+      const next = [...items];
+      next.splice(from + step, 0, ...next.splice(from, 1));
+      return next;
+    });
+  }
+
+  function finish() {
+    dialog.current?.close();
+    onClose();
+  }
+
+  async function work(action: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    const done = await save(action);
+    setBusy(false);
+    if (done) finish();
+  }
+
+  function close() {
+    const edits = changesOf(task, withNewItem());
+    if (!edits) return finish();
+    work(async () => onSaved(await updateTask(task.id, edits)));
+  }
+
+  function addItem() {
+    if (!newItem.trim()) return;
+    setDetails(withNewItem());
+    setNewItem("");
+  }
+
+  function onKeyDown(event: KeyboardEvent) {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      document.querySelector(":popover-open")
+    )
+      return;
+    event.preventDefault();
+    close();
+  }
+
+  function onBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) close();
+  }
+
+  const place =
+    details.placement.date !== undefined ? "date" : details.placement.listId;
+
+  return (
+    <dialog
+      className={styles.card}
+      ref={dialog}
+      aria-label={task.title}
+      onKeyDown={onKeyDown}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onClick={onBackdropClick}
+    >
+      <div className={styles.cardBody}>
+        <input
+          className={styles.cardTitle}
+          aria-label="Title"
+          value={details.title}
+          onChange={(event) => set({ title: event.target.value })}
+        />
+        <div className={styles.cardField}>
+          <span className={styles.cardLabel}>Move to</span>
+          <div className={styles.cardPlace}>
+            <Dropdown
+              label="Move to"
+              list={placeList}
+              value={place}
+              options={[
+                { value: "date", label: "Date" },
+                ...lists.map((list) => ({ value: list.id, label: list.title })),
+              ]}
+              onChange={(next) =>
+                set({
+                  placement:
+                    next === "date"
+                      ? { date: task.date ?? today }
+                      : { listId: next },
+                })
+              }
+            />
+            {details.placement.date && (
+              <input
+                className={styles.dateInput}
+                type="date"
+                aria-label="Date"
+                required
+                value={details.placement.date}
+                onChange={(event) =>
+                  event.target.value &&
+                  set({ placement: { date: event.target.value } })
+                }
+              />
+            )}
+          </div>
+        </div>
+        <fieldset className={styles.cardField}>
+          <legend className={styles.cardLabel}>Color</legend>
+          <div className={styles.colors}>
+            {[null, ...taskColorValues].map((color) => (
+              <input
+                key={color ?? "none"}
+                className={`${styles.swatch} ${styles.tinted}`}
+                data-color={color ?? "none"}
+                type="radio"
+                name={`color-${task.id}`}
+                aria-label={color ? colorName(color) : "No color"}
+                checked={details.color === color}
+                onChange={() => set({ color })}
+              />
+            ))}
+          </div>
+        </fieldset>
+        <label className={styles.cardField}>
+          <span className={styles.cardLabel}>Notes</span>
+          <textarea
+            className={styles.notes}
+            value={details.notes}
+            rows={3}
+            onChange={(event) => set({ notes: event.target.value })}
+          />
+        </label>
+        <div className={styles.cardField} role="group" aria-label="Checklist">
+          <span className={styles.cardLabel} aria-hidden="true">
+            Checklist
+          </span>
+          <ul className={styles.checklist}>
+            {details.checklist.map((item, index) => (
+              <li
+                key={item.id}
+                className={`${styles.checkItem} ${item.completed ? styles.done : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  aria-labelledby={`item-${item.id}`}
+                  checked={item.completed}
+                  onChange={(event) =>
+                    changeItem(item.id, { completed: event.target.checked })
+                  }
+                />
+                <input
+                  className={styles.checkText}
+                  id={`item-${item.id}`}
+                  aria-label="Checklist item"
+                  value={item.text}
+                  onChange={(event) =>
+                    changeItem(item.id, { text: event.target.value })
+                  }
+                />
+                <button
+                  className={styles.action}
+                  type="button"
+                  aria-label={`Move ${item.text} up`}
+                  disabled={index === 0}
+                  onClick={() => moveItem(index, -1)}
+                >
+                  <UpIcon />
+                </button>
+                <button
+                  className={styles.action}
+                  type="button"
+                  aria-label={`Move ${item.text} down`}
+                  disabled={index === details.checklist.length - 1}
+                  onClick={() => moveItem(index, 1)}
+                >
+                  <DownIcon />
+                </button>
+                <button
+                  className={`${styles.action} ${styles.remove}`}
+                  type="button"
+                  aria-label={`Delete ${item.text}`}
+                  onClick={() =>
+                    setItems((items) => items.filter((i) => i.id !== item.id))
+                  }
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+            <li className={styles.checkItem}>
+              <PlusIcon />
+              <input
+                className={styles.checkText}
+                aria-label="New item"
+                placeholder="Add item"
+                value={newItem}
+                onChange={(event) => setNewItem(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && addItem()}
+              />
+            </li>
+          </ul>
+        </div>
+        <div className={styles.cardFooter}>
+          <button
+            className={`${styles.tool} ${styles.deleteTask}`}
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              work(async () => {
+                await deleteTask(task.id);
+                onDeleted(task.id);
+              })
+            }
+          >
+            Delete task
+          </button>
+          {alert}
+          <button
+            className={`${styles.tool} ${styles.primary}`}
+            type="button"
+            disabled={busy}
+            onClick={close}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
 export function DetectTimeZone() {
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -1009,6 +1391,8 @@ export function Week({
   const selected = lists.find((list) => list.id === selectedId) ?? lists[0];
   const [editing, setEditing] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = tasks.find((task) => task.id === openId);
   const previousWeek = `/?week=${addDays(dates[0], -7)}`;
   const nextWeek = `/?week=${addDays(dates[0], 7)}`;
   const router = useRouter();
@@ -1071,6 +1455,7 @@ export function Week({
           task={task}
           onChanged={replace}
           onDeleted={remove}
+          onOpen={() => setOpenId(task.id)}
         />
       )),
       ...draftsByPlace[index].map((draft) => (
@@ -1194,6 +1579,17 @@ export function Week({
           {rowsOf(7, { listId: selected.id })}
         </Band>
       </div>
+      {opened && (
+        <TaskCard
+          key={opened.id}
+          task={opened}
+          lists={lists}
+          today={today}
+          onSaved={replace}
+          onDeleted={remove}
+          onClose={() => setOpenId(null)}
+        />
+      )}
     </main>
   );
 }

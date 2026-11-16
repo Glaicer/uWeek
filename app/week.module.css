@@ -677,6 +677,65 @@ a.calendarRow:not([aria-current="true"]):focus {
   cursor: pointer;
 }
 
+button.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: stretch;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mark {
+  display: flex;
+  flex: none;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.tinted[data-color="red"] {
+  --task-color: #d14343;
+}
+
+.tinted[data-color="orange"] {
+  --task-color: #e07a2b;
+}
+
+.tinted[data-color="yellow"] {
+  --task-color: #d9a514;
+}
+
+.tinted[data-color="green"] {
+  --task-color: #3a9a5b;
+}
+
+.tinted[data-color="blue"] {
+  --task-color: #3b72d4;
+}
+
+.tinted[data-color="purple"] {
+  --task-color: #8b55c9;
+}
+
+.task {
+  position: relative;
+}
+
+.task[data-color]::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--task-color);
+}
+
 .done .name {
   color: var(--secondary);
   text-decoration: line-through;
@@ -756,6 +815,197 @@ a.calendarRow:not([aria-current="true"]):focus {
   .action {
     opacity: 0.6;
   }
+}
+
+.card {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--background);
+  color: var(--text);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.16);
+}
+
+.card::backdrop {
+  background: rgb(0 0 0 / 0.2);
+}
+
+.cardBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  padding: 20px 22px;
+}
+
+.cardTitle {
+  width: 100%;
+  padding: 0 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--text);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  outline: none;
+}
+
+.cardField {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cardLabel {
+  padding: 0;
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.cardPlace {
+  display: flex;
+  gap: 8px;
+}
+
+.cardPlace .dropdown {
+  flex: none;
+  min-width: 140px;
+}
+
+.dateInput {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.dateInput:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.colors {
+  display: flex;
+  gap: 10px;
+  padding: 4px 2px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--task-color);
+  appearance: none;
+  cursor: pointer;
+}
+
+.swatch[data-color="none"] {
+  --task-color: var(--border-strong);
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(
+    135deg,
+    transparent 46%,
+    var(--border-strong) 46% 54%,
+    transparent 54%
+  );
+}
+
+.swatch:checked {
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 4px var(--task-color);
+}
+
+.swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 5px;
+}
+
+.notes {
+  width: 100%;
+  min-height: calc(var(--row) * 3);
+  padding: 0 10px;
+  border: 0;
+  background: linear-gradient(transparent calc(var(--row) - 1px), var(--rule) 0)
+    0 0 / 100% var(--row) local;
+  color: inherit;
+  font: inherit;
+  line-height: var(--row);
+  outline: none;
+  resize: vertical;
+}
+
+.checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--row);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--secondary);
+}
+
+.checkItem input[type="checkbox"] {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.checkText {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.checkItem.done .checkText {
+  color: var(--secondary);
+  text-decoration: line-through;
+}
+
+.checkItem:hover .action,
+.checkItem:focus-within .action {
+  opacity: 1;
+}
+
+.checkItem:hover .action:disabled,
+.checkItem:focus-within .action:disabled {
+  opacity: 0.3;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.deleteTask {
+  color: var(--danger);
 }
 
 @media (max-width: 1000px) {
