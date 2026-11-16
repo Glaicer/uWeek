@@ -38,9 +38,10 @@ const isoDate = z.string().refine(validCalendarDate, "Invalid date");
 const title = z.string().trim().min(1).max(500);
 const taskId = z.uuid();
 const range = z.object({ from: isoDate, to: isoDate });
+const index = z.int().min(0).optional();
 const placement = z.xor([
-  z.object({ date: isoDate }),
-  z.object({ listId: z.uuid() }),
+  z.object({ date: isoDate, index }),
+  z.object({ listId: z.uuid(), index }),
 ]);
 const newTask = z.xor([
   z.object({ title, date: isoDate }),
@@ -204,8 +205,16 @@ async function listsAndTheirTasks(userId: string, from: string, to: string) {
 
 type TaskPlacement = z.output<typeof placement>;
 
+const inPlace = (userId: string, place: TaskPlacement) =>
+  and(
+    eq(tasks.userId, userId),
+    "date" in place
+      ? eq(tasks.date, place.date)
+      : eq(tasks.listId, place.listId),
+  );
+
 const endOf = (userId: string, place: TaskPlacement) =>
-  sql`(select coalesce(max(${tasks.position}), -1) + 1 from ${tasks} where ${tasks.userId} = ${userId} and ${"date" in place ? eq(tasks.date, place.date) : eq(tasks.listId, place.listId)})`;
+  sql`(select coalesce(max(${tasks.position}), -1) + 1 from ${tasks} where ${inPlace(userId, place)})`;
 
 export async function createTask(
   userId: string,
@@ -321,6 +330,24 @@ export async function updateTask(
       .where(owned(userId, id))
       .returning(taskColumns);
     if (!task) return null;
+    if (placement?.index !== undefined) {
+      const order = (
+        await tx
+          .select({ id: tasks.id })
+          .from(tasks)
+          .where(inPlace(userId, placement))
+          .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+          .for("update")
+      )
+        .map((row) => row.id)
+        .filter((id) => id !== task.id);
+      order.splice(placement.index, 0, task.id);
+      for (const [position, id] of order.entries())
+        await tx
+          .update(tasks)
+          .set({ position })
+          .where(and(eq(tasks.userId, userId), eq(tasks.id, id)));
+    }
     if (checklist) {
       await tx.delete(checklistItems).where(eq(checklistItems.taskId, task.id));
       if (checklist.length)

@@ -31,10 +31,12 @@ import {
   createTask,
   deleteList,
   deleteTask,
+  moveList,
   renameList,
   saveTimeZone,
   updateTask,
 } from "./actions";
+import { startDrag } from "./drag";
 import styles from "./week.module.css";
 
 const dateRange = new Intl.DateTimeFormat("en-GB", {
@@ -70,6 +72,7 @@ const saveFailed = "Couldn't save. Try again.";
 function Band({
   heading,
   aside,
+  place,
   panelOf,
   rows,
   className,
@@ -79,6 +82,7 @@ function Band({
 }: {
   heading: ReactNode;
   aside?: ReactNode;
+  place: string;
   panelOf?: string;
   rows: number;
   className?: string;
@@ -107,6 +111,8 @@ function Band({
       {aside}
       <div
         className={styles.rows}
+        data-zone="tasks"
+        data-place={place}
         role={panelOf ? "tabpanel" : undefined}
         aria-labelledby={panelOf}
       >
@@ -194,6 +200,18 @@ interface Draft {
 }
 
 const placeOf = (placement: Placement) => placement.date ?? placement.listId;
+
+function placed(tasks: Task[], moved: Task, index: number): Task[] {
+  const rest = tasks.filter((task) => task.id !== moved.id);
+  const place = rest.filter((task) => placeOf(task) === placeOf(moved));
+  const at =
+    index < place.length
+      ? rest.indexOf(place[index])
+      : place.length
+        ? rest.indexOf(place[place.length - 1]) + 1
+        : rest.length;
+  return [...rest.slice(0, at), moved, ...rest.slice(at)];
+}
 
 function NewTask({
   onSave,
@@ -329,11 +347,13 @@ function TaskRow({
   onChanged,
   onDeleted,
   onEdit,
+  onMove,
 }: {
   task: Task;
   onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
   onEdit: () => void;
+  onMove: (place: string, index: number) => void;
 }) {
   const [completed, setCompleted] = useOptimistic(task.completed);
   const { save, alert } = useSave();
@@ -343,6 +363,15 @@ function TaskRow({
     <div
       className={`${styles.row} ${styles.task} ${styles.tinted} ${completed ? styles.done : ""}`}
       data-color={task.color ?? undefined}
+      data-item={task.id}
+      onPointerDown={(event) =>
+        startDrag(event, {
+          zones: '[data-zone="tasks"]',
+          axis: "y",
+          ghost: styles.ghost,
+          onDrop: (zone, index) => onMove(zone.dataset.place!, index),
+        })
+      }
     >
       <button
         className={styles.name}
@@ -867,6 +896,19 @@ function ListTabs({
     confirm.current?.showModal();
   }
 
+  function reorder(list: TaskList, index: number) {
+    const rest = lists.filter((l) => l !== list);
+    onListsChange([...rest.slice(0, index), list, ...rest.slice(index)]);
+    change(async () => {
+      try {
+        await moveList(list.id, index);
+      } catch (error) {
+        onListsChange(lists);
+        throw error;
+      }
+    });
+  }
+
   async function remove() {
     confirm.current?.close();
     if (!deleting) return;
@@ -903,6 +945,7 @@ function ListTabs({
       <div
         className={`${styles.tabs} ${managing ? styles.managing : ""}`}
         ref={tablist}
+        data-zone="lists"
         role="tablist"
         aria-label="Lists"
       >
@@ -910,7 +953,21 @@ function ListTabs({
           editing === list ? (
             input("List name")
           ) : (
-            <span key={list.id} className={styles.tabItem} role="presentation">
+            <span
+              key={list.id}
+              className={styles.tabItem}
+              role="presentation"
+              data-item={list.id}
+              onPointerDown={(event) =>
+                !busy &&
+                startDrag(event, {
+                  zones: '[data-zone="lists"]',
+                  axis: "x",
+                  ghost: styles.ghost,
+                  onDrop: (_, index) => reorder(list, index),
+                })
+              }
+            >
               <button
                 className={styles.tab}
                 id={tabId(list)}
@@ -1392,6 +1449,30 @@ export function Week({
     setTasks((tasks) => tasks.map((t) => (t.id === task.id ? task : t)));
   const remove = (id: string) =>
     setTasks((tasks) => tasks.filter((t) => t.id !== id));
+  const { save, alert } = useSave();
+  function move(task: Task, place: string, index: number) {
+    const placement: Placement = dates.includes(place)
+      ? { date: place }
+      : { listId: place };
+    const home = tasks
+      .filter((other) => placeOf(other) === placeOf(task))
+      .indexOf(task);
+    setTasks((tasks) =>
+      placed(
+        tasks,
+        { ...task, date: undefined, listId: undefined, ...placement },
+        index,
+      ),
+    );
+    save(async () => {
+      try {
+        await updateTask(task.id, { placement: { ...placement, index } });
+      } catch (error) {
+        setTasks((tasks) => placed(tasks, task, home));
+        throw error;
+      }
+    });
+  }
   const discard = (draft: Draft) =>
     setDrafts((drafts) => drafts.filter((d) => d.id !== draft.id));
   async function saveDraft(draft: Draft) {
@@ -1420,6 +1501,7 @@ export function Week({
           onChanged={replace}
           onDeleted={remove}
           onEdit={() => setOpenId(task.id)}
+          onMove={(place, index) => move(task, place, index)}
         />
       )),
       ...draftsByPlace[index].map((draft) => (
@@ -1463,6 +1545,7 @@ export function Week({
         <div className={styles.title}>
           <h1 className={styles.week}>Week {weekNumber(dates)}</h1>
           <span className={styles.range}>{weekRange(dates)}</span>
+          {alert}
         </div>
         <nav className={styles.tools} aria-label="Planner">
           <WeekLink
@@ -1501,6 +1584,7 @@ export function Week({
           return (
             <Band
               key={key}
+              place={key}
               current={isToday}
               rows={rows[index]}
               onEmptyClick={() => open(key)}
@@ -1521,6 +1605,7 @@ export function Week({
         })}
         <Band
           className={styles.someday}
+          place={selected.id}
           rows={rows[7] - 1}
           panelOf={tabId(selected)}
           onEmptyClick={() => open(selected.id)}

@@ -20,6 +20,11 @@
   box-sizing: border-box;
 }
 
+html[data-dragging],
+html[data-dragging] * {
+  cursor: grabbing;
+}
+
 body {
   margin: 0;
   background: var(--background);

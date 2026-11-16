@@ -93,6 +93,11 @@ export async function renameList(id: string, title: string): Promise<TaskList> {
   return list;
 }
 
+export async function moveList(id: string, to: number): Promise<void> {
+  if (!(await planner.moveList(await currentUserId(), id, { to })))
+    throw new Error("List not found");
+}
+
 export async function deleteList(id: string): Promise<void> {
   if (!(await planner.deleteList(await currentUserId(), id)))
     throw new Error("List not deleted");

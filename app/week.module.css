@@ -724,6 +724,73 @@ button.name {
   position: relative;
 }
 
+.rows,
+.tabItem {
+  position: relative;
+}
+
+.task,
+.tabItem {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.task[data-dragging],
+.tabItem[data-dragging] {
+  opacity: 0.4;
+}
+
+.ghost {
+  position: fixed;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--background);
+  box-shadow: 0 4px 16px rgb(29 39 51 / 0.18);
+  pointer-events: none;
+}
+
+.task[data-insert]::after,
+.rows[data-insert]::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.task[data-insert="before"]::after,
+.rows[data-insert]::after {
+  top: -1px;
+}
+
+.task[data-insert="after"]::after {
+  bottom: -2px;
+}
+
+.tabItem[data-insert]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.tabItem[data-insert="before"]::after {
+  left: -2px;
+}
+
+.tabItem[data-insert="after"]::after {
+  right: -2px;
+}
+
 .task[data-color]::before {
   content: "";
   position: absolute;

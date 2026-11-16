@@ -247,6 +247,58 @@ test("a user renames lists and moves them to another place in the order", async 
   expect(await titles()).toEqual(["Errands", "A", "C"]);
 });
 
+test("a user reorders tasks within a day and moves one to a given row of another day or list in one step", async () => {
+  const user = await newUser();
+  const list = await createList(user, { title: "Someday" });
+  const now = new Date("2026-11-13T10:00:00Z");
+  const titles = async () => {
+    const { tasks } = await readWeek(user, {}, now);
+    const of = (place: string) =>
+      tasks
+        .filter((task) => task.date === place || task.listId === place)
+        .map((task) => task.title);
+    return { tue: of("2026-11-10"), wed: of("2026-11-11"), list: of(list.id) };
+  };
+  const add = (title: string, date: string) =>
+    createTask(user, { title, date });
+  const gym = await add("Gym", "2026-11-10");
+  const milk = await add("Milk", "2026-11-10");
+  const call = await add("Call", "2026-11-10");
+  await add("Read", "2026-11-11");
+  const book = await add("Book", "2026-11-11");
+  await createTask(user, { title: "Paint", listId: list.id });
+
+  await updateTask(user, call.id, {
+    placement: { date: "2026-11-10", index: 0 },
+  });
+  expect((await titles()).tue).toEqual(["Call", "Gym", "Milk"]);
+  await updateTask(user, call.id, {
+    placement: { date: "2026-11-10", index: 2 },
+  });
+  expect((await titles()).tue).toEqual(["Gym", "Milk", "Call"]);
+
+  await updateTask(user, gym.id, {
+    placement: { date: "2026-11-11", index: 1 },
+  });
+  await updateTask(user, milk.id, { placement: { listId: list.id, index: 0 } });
+  await updateTask(user, book.id, {
+    placement: { date: "2026-11-10", index: 9 },
+  });
+  expect(await titles()).toEqual({
+    tue: ["Call", "Book"],
+    wed: ["Read", "Gym"],
+    list: ["Milk", "Paint"],
+  });
+
+  await updateTask(user, milk.id, {
+    placement: { date: "2026-11-10", index: 1 },
+  });
+  expect((await titles()).tue).toEqual(["Call", "Milk", "Book"]);
+  await expect(
+    updateTask(user, milk.id, { placement: { date: "2026-11-10", index: -1 } }),
+  ).rejects.toThrow();
+});
+
 test("deleting a list deletes its tasks; the last list stays", async () => {
   const user = await newUser();
   const keep = await createList(user, { title: "Keep" });
