@@ -693,7 +693,6 @@ button.name {
 .mark {
   display: flex;
   flex: none;
-  color: var(--secondary);
   font-size: 13px;
 }
 
