@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { afterAll, expect, test } from "vitest";
 import { db } from "./db/client";
 import { tasks, users } from "./db/schema";
@@ -6,8 +7,12 @@ import {
   createTask,
   deleteList,
   deleteTask,
+  getTask,
+  listLists,
   listTasks,
   moveList,
+  PlannerNotFoundError,
+  queryTasks,
   readWeek,
   renameList,
   updateSettings,
@@ -679,4 +684,227 @@ test("changing the rule of a missed occurrence keeps the other missed ones on to
     ["2026-11-13", null],
     ["2026-11-13", null],
   ]);
+});
+
+test("queryTasks filters stored and virtual tasks by placement status and literal text", async () => {
+  const user = await newUser();
+  const other = await newUser();
+  const now = new Date("2026-11-20T10:00:00Z");
+
+  const series = await createTask(user, {
+    title: "Standup",
+    date: "2026-11-20",
+  });
+  await updateTask(user, series.id, { repeat: daily });
+  const [, saturday] = await listTasks(user, {
+    from: "2026-11-20",
+    to: "2026-11-21",
+  });
+  await updateTask(user, saturday.id, { notes: "Bring the board" });
+  await updateTask(user, series.id, { completed: true });
+
+  await createTask(user, {
+    title: "Save 50% today",
+    date: "2026-11-22",
+  });
+  await createTask(user, { title: "Save 50 today", date: "2026-11-22" });
+  await createTask(user, {
+    title: "Plan_A",
+    date: "2026-11-22",
+  });
+  await createTask(user, { title: "Plan A", date: "2026-11-22" });
+
+  const list = await createList(user, { title: "Inbox" });
+  await createTask(user, { title: "Someday item", listId: list.id });
+  const done = await createTask(user, { title: "Done idea", listId: list.id });
+  await updateTask(user, done.id, { completed: true });
+
+  const foreignList = await createList(other, { title: "Theirs" });
+  await createTask(other, { title: "Not mine", date: "2026-11-22" });
+
+  const range = { from: "2026-11-20", to: "2026-11-22" };
+  expect(
+    (await queryTasks(user, range, now)).map((task) => [
+      task.date,
+      task.title,
+      task.completed,
+    ]),
+  ).toEqual([
+    ["2026-11-20", "Standup", true],
+    ["2026-11-21", "Standup", false],
+    ["2026-11-22", "Save 50% today", false],
+    ["2026-11-22", "Save 50 today", false],
+    ["2026-11-22", "Plan_A", false],
+    ["2026-11-22", "Plan A", false],
+    ["2026-11-22", "Standup", false],
+  ]);
+  expect(
+    (await queryTasks(user, { ...range, completed: "false" }, now)).map(
+      (task) => [task.date, task.title],
+    ),
+  ).toEqual([
+    ["2026-11-21", "Standup"],
+    ["2026-11-22", "Save 50% today"],
+    ["2026-11-22", "Save 50 today"],
+    ["2026-11-22", "Plan_A"],
+    ["2026-11-22", "Plan A"],
+    ["2026-11-22", "Standup"],
+  ]);
+  expect(
+    (await queryTasks(user, { ...range, completed: "true" }, now)).map(
+      (task) => task.title,
+    ),
+  ).toEqual(["Standup"]);
+
+  expect(
+    (await queryTasks(user, { ...range, q: "BOARD" }, now)).map(
+      (task) => task.id,
+    ),
+  ).toEqual([saturday.id]);
+  expect(
+    (await queryTasks(user, { ...range, q: "%" }, now)).map(
+      (task) => task.title,
+    ),
+  ).toEqual(["Save 50% today"]);
+  expect(
+    (await queryTasks(user, { ...range, q: "_" }, now)).map(
+      (task) => task.title,
+    ),
+  ).toEqual(["Plan_A"]);
+
+  expect(
+    (await queryTasks(user, { listId: list.id }, now)).map(
+      (task) => task.title,
+    ),
+  ).toEqual(["Someday item", "Done idea"]);
+  expect(
+    (await queryTasks(user, { listId: list.id, completed: "false" }, now)).map(
+      (task) => task.title,
+    ),
+  ).toEqual(["Someday item"]);
+  expect(
+    (await queryTasks(user, { listId: list.id, completed: "true" }, now)).map(
+      (task) => task.title,
+    ),
+  ).toEqual(["Done idea"]);
+
+  await expect(
+    queryTasks(user, { listId: foreignList.id }, now),
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
+  await expect(
+    queryTasks(user, { listId: crypto.randomUUID() }, now),
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
+
+  expect(await listLists(user)).toEqual([{ id: list.id, title: "Inbox" }]);
+  expect(await listLists(other)).toEqual([
+    { id: foreignList.id, title: "Theirs" },
+  ]);
+});
+
+test("task queries and week reads share timezone rollover without duplicates", async () => {
+  const user = await newUser();
+  await updateSettings(user, { timeZone: "Europe/Moscow" });
+  const now = new Date("2026-11-09T22:30:00Z");
+  const range = { from: "2026-11-08", to: "2026-11-10" };
+
+  await createTask(user, { title: "Overdue", date: "2026-11-08" });
+  const series = await createTask(user, {
+    title: "Missed",
+    date: "2026-11-08",
+  });
+  await updateTask(user, series.id, { repeat: daily });
+
+  const first = await queryTasks(user, range, now);
+  const week = await readWeek(user, {}, now);
+  const again = await queryTasks(user, range, now);
+
+  expect(again).toEqual(first);
+  const shape = (tasks: Task[]) =>
+    tasks
+      .map((task) => [
+        task.date,
+        task.title,
+        task.recurrence?.occurrence ?? null,
+      ])
+      .sort();
+  expect(shape(first)).toEqual([
+    ["2026-11-10", "Missed", "2026-11-08"],
+    ["2026-11-10", "Missed", "2026-11-09"],
+    ["2026-11-10", "Missed", "2026-11-10"],
+    ["2026-11-10", "Overdue", null],
+  ]);
+  expect(
+    shape(week.tasks.filter((task) => task.date! <= "2026-11-10")),
+  ).toEqual(shape(first));
+  expect(week.today).toBe("2026-11-10");
+
+  const other = await newUser();
+  await createTask(other, { title: "No zone", date: "2026-11-08" });
+  expect(
+    (
+      await queryTasks(other, { from: "2026-11-08", to: "2026-11-08" }, now)
+    ).map((task) => [task.date, task.title]),
+  ).toEqual([["2026-11-08", "No zone"]]);
+});
+
+test("getTask reads stored and virtual occurrences without materializing a future one", async () => {
+  const user = await newUser();
+  const other = await newUser();
+  const now = new Date("2026-11-09T10:00:00Z");
+  const countRows = async (id: string) =>
+    (await db.select().from(tasks).where(eq(tasks.userId, id))).length;
+
+  const plain = await createTask(user, {
+    title: "Plain",
+    date: "2026-11-09",
+  });
+  expect(await getTask(user, plain.id, now)).toEqual(plain);
+
+  const first = await createTask(user, {
+    title: "Repeat",
+    date: "2026-11-09",
+  });
+  const started = await updateTask(user, first.id, { repeat: daily });
+  const seriesId = started!.recurrence!.seriesId;
+  const before = await countRows(user);
+
+  const virtualId = `${seriesId}_2026-11-12`;
+  expect(await getTask(user, virtualId, now)).toMatchObject({
+    id: virtualId,
+    title: "Repeat",
+    date: "2026-11-12",
+    completed: false,
+    recurrence: { seriesId, occurrence: "2026-11-12" },
+  });
+  expect(await countRows(user)).toBe(before);
+  expect(await getTask(user, `${seriesId}_2026-11-09`, now)).toEqual(
+    await getTask(user, first.id, now),
+  );
+
+  const tenth = `${seriesId}_2026-11-10`;
+  await updateTask(user, tenth, { placement: { date: "2026-11-20" } });
+  expect(await getTask(user, tenth, now)).toMatchObject({
+    id: tenth,
+    date: "2026-11-20",
+    recurrence: { occurrence: "2026-11-10" },
+  });
+
+  await deleteTask(user, `${seriesId}_2026-11-11`);
+  expect(await getTask(user, `${seriesId}_2026-11-11`, now)).toBeNull();
+
+  expect(await getTask(user, crypto.randomUUID(), now)).toBeNull();
+  expect(await getTask(user, `${seriesId}_2026-11-01`, now)).toBeNull();
+  expect(await getTask(other, plain.id, now)).toBeNull();
+
+  const foreign = await createTask(other, {
+    title: "Theirs",
+    date: "2026-11-09",
+  });
+  const foreignSeries = await updateTask(other, foreign.id, { repeat: daily });
+  const foreignId = foreignSeries!.recurrence!.seriesId;
+  expect(await getTask(user, `${foreignId}_2026-11-12`, now)).toBeNull();
+  expect(await getTask(other, `${foreignId}_2026-11-12`, now)).toMatchObject({
+    title: "Theirs",
+    date: "2026-11-12",
+  });
 });

@@ -219,3 +219,20 @@ export const checklistItems = pgTable(
   },
   (table) => [index().on(table.taskId, table.position)],
 );
+
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    tokenHash: text().notNull().unique(),
+    prefix: text().notNull(),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp({ withTimezone: true }),
+    revokedAt: timestamp({ withTimezone: true }),
+  },
+  (table) => [index().on(table.userId)],
+);

@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "../src/auth";
 import { readWeek, weekQuery } from "../src/planner";
@@ -68,6 +69,9 @@ export default async function WeekPage({
                   </button>
                 ))}
               </form>
+              <Link className={styles.menuItem} href="/settings/api-tokens">
+                API tokens
+              </Link>
               <form action={signOut}>
                 <button className={styles.menuItem}>Sign out</button>
               </form>

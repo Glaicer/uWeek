@@ -21,8 +21,28 @@ import {
 } from "./calendar";
 import { db } from "./db/client";
 import { checklistItems, lists, tasks, taskSeries, users } from "./db/schema";
-import { taskColorValues, type Placement, type TaskColor } from "./model";
+import { type Placement, type TaskColor } from "./model";
 import { occurrences, type Repeat, type Series } from "./recurrence";
+import {
+  edits,
+  listId,
+  listMove,
+  newList,
+  newTask,
+  occurrenceId,
+  placement,
+  range,
+  scope,
+  searchQuery,
+  settings,
+  taskId,
+  taskQuery,
+  weekQuery,
+  type TaskEdits,
+} from "./planner-schemas";
+
+export type { TaskEdits };
+export { weekQuery };
 
 export interface ChecklistItem {
   id: string;
@@ -52,96 +72,6 @@ export interface TaskList {
   id: string;
   title: string;
 }
-
-const isoDate = z.string().refine(validCalendarDate, "Invalid date");
-const title = z.string().trim().min(1).max(500);
-const occurrenceId = /^([0-9a-f-]{36})_(\d{4}-\d{2}-\d{2})$/;
-const taskId = z.union([z.uuid(), z.string().regex(occurrenceId)]);
-const scope = z.enum(["this", "following"]);
-const interval = z.int().min(1).max(999);
-const until = isoDate.nullable();
-const repeat = z.discriminatedUnion("every", [
-  z.object({ every: z.literal("day"), interval, until }),
-  z.object({
-    every: z.literal("week"),
-    interval,
-    until,
-    weekdays: z
-      .array(z.literal([0, 1, 2, 3, 4, 5, 6]))
-      .min(1)
-      .max(7)
-      .transform((days) => [...new Set(days)].sort()),
-  }),
-  z.object({
-    every: z.literal("month"),
-    interval,
-    until,
-    monthEnd: z.enum(["clamp", "last", "overflow"]),
-  }),
-  z.object({ every: z.literal("year"), interval, until }),
-]);
-const range = z.object({ from: isoDate, to: isoDate });
-const index = z.int().min(0).optional();
-const placement = z.xor([
-  z.object({ date: isoDate, index }),
-  z.object({ listId: z.uuid(), index }),
-]);
-const newTask = z.xor([
-  z.object({ title, date: isoDate }),
-  z.object({ title, listId: z.uuid() }),
-]);
-const newList = z.object({ title });
-const listId = z.uuid();
-const listMove = z.object({ to: z.int().min(0) });
-const edits = z
-  .object({
-    title: title.optional(),
-    completed: z.boolean().optional(),
-    notes: z.string().max(10_000).optional(),
-    color: z.enum(taskColorValues).nullable().optional(),
-    checklist: z
-      .array(z.object({ id: z.uuid(), text: title, completed: z.boolean() }))
-      .max(200)
-      .optional(),
-    placement: placement.optional(),
-    repeat: repeat.nullable().optional(),
-  })
-  .refine(
-    (edits) => Object.values(edits).some((edit) => edit !== undefined),
-    "Nothing to change",
-  );
-
-export type TaskEdits = z.input<typeof edits>;
-
-const timeZone = z.string().refine((zone) => {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: zone });
-    return true;
-  } catch {
-    return false;
-  }
-}, "Unknown time zone");
-const settings = z
-  .object({
-    timeZone: timeZone.optional(),
-    weekStartsOn: z.coerce
-      .number()
-      .pipe(z.literal([0, 1]))
-      .optional(),
-  })
-  .refine(
-    (settings) =>
-      settings.timeZone !== undefined || settings.weekStartsOn !== undefined,
-    "Nothing to change",
-  );
-export const weekQuery = z.object({
-  week: isoDate.optional(),
-  focus: taskId.optional(),
-});
-const searchQuery = z.object({
-  query: z.string().trim().min(1).max(500),
-  cursor: z.int().min(0).default(0),
-});
 
 export interface SearchResult {
   id: string;
@@ -721,8 +651,8 @@ async function release(
 ) {
   const rows = fromOccurrence(seriesId, after, false);
   const kept = keepMoved
-    ? sql`${tasks.deletedAt} is null and (${tasks.completedAt} is not null or ${tasks.date} is distinct from ${tasks.occurrence})`
-    : sql`${tasks.deletedAt} is null and ${tasks.completedAt} is not null`;
+    ? sql`(${tasks.deletedAt} is null and (${tasks.completedAt} is not null or ${tasks.date} is distinct from ${tasks.occurrence}))`
+    : sql`(${tasks.deletedAt} is null and ${tasks.completedAt} is not null)`;
   await tx.delete(tasks).where(and(rows, not(kept)));
   await tx.update(tasks).set({ seriesId: null, occurrence: null }).where(rows);
 }
@@ -733,7 +663,8 @@ async function startSeries(
   task: Omit<TaskRecord, "checklist">,
   repeat: Repeat,
 ) {
-  if (task.date === null) throw new Error("Only a dated task repeats");
+  if (task.date === null)
+    throw new PlannerInputError("Only a dated task repeats");
   const id = crypto.randomUUID();
   await tx.insert(taskSeries).values({
     id,
@@ -990,6 +921,127 @@ async function rollOverUnfinishedTasks(userId: string, today: string) {
   });
 }
 
+export class PlannerNotFoundError extends Error {}
+export class PlannerInputError extends Error {}
+
+async function preparePlannerRead(
+  userId: string,
+  now: Date,
+): Promise<{
+  timeZone: string | null;
+  weekStartsOn: WeekStart;
+  today: string;
+}> {
+  const [user] = await db
+    .select({ timeZone: users.timeZone, weekStartsOn: users.weekStartsOn })
+    .from(users)
+    .where(eq(users.id, userId));
+  // why: before the browser reports a zone "today" is only a guess, so nothing is moved onto it
+  const today = todayIn(user.timeZone ?? "UTC", now);
+  if (user.timeZone) await rollOverUnfinishedTasks(userId, today);
+  return { timeZone: user.timeZone, weekStartsOn: user.weekStartsOn, today };
+}
+
+async function listTasksIn(userId: string, id: string): Promise<Task[]> {
+  return snapshot(async (tx) => {
+    const [list] = await tx
+      .select({ id: lists.id })
+      .from(lists)
+      .where(ownedList(userId, id));
+    if (!list) throw new PlannerNotFoundError("List not found");
+    return withChecklists(
+      tx,
+      await tx
+        .select(taskColumns)
+        .from(tasks)
+        .where(
+          and(
+            eq(tasks.userId, userId),
+            eq(tasks.listId, id),
+            isNull(tasks.deletedAt),
+          ),
+        )
+        .orderBy(...taskOrder),
+    );
+  });
+}
+
+export async function queryTasks(
+  userId: string,
+  input: z.input<typeof taskQuery>,
+  now: Date,
+): Promise<Task[]> {
+  const query = taskQuery.parse(input);
+  await preparePlannerRead(userId, now);
+  const found =
+    "listId" in query
+      ? await listTasksIn(userId, query.listId)
+      : await listTasks(userId, { from: query.from, to: query.to });
+  const text = query.q?.toLowerCase();
+  return found.filter((task) => {
+    if (
+      query.completed !== undefined &&
+      task.completed !== (query.completed === "true")
+    )
+      return false;
+    return (
+      text === undefined ||
+      task.title.toLowerCase().includes(text) ||
+      task.notes.toLowerCase().includes(text)
+    );
+  });
+}
+
+export async function getTask(
+  userId: string,
+  id: string,
+  now: Date,
+): Promise<Task | null> {
+  const ref = taskId.parse(id);
+  await preparePlannerRead(userId, now);
+  return snapshot(async (tx) => {
+    const [stored] = await tx
+      .select(taskColumns)
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.id, ref),
+          isNull(tasks.deletedAt),
+        ),
+      );
+    if (stored) return (await withChecklists(tx, [stored]))[0];
+    const occurrence = occurrenceId.exec(ref);
+    if (!occurrence) return null;
+    const [, seriesId, date] = occurrence;
+    const [series] = await tx
+      .select()
+      .from(taskSeries)
+      .where(and(eq(taskSeries.userId, userId), eq(taskSeries.id, seriesId)));
+    if (!series) return null;
+    const pair = and(eq(tasks.seriesId, seriesId), eq(tasks.occurrence, date));
+    const [taken] = await tx
+      .select(taskColumns)
+      .from(tasks)
+      .where(and(pair, isNull(tasks.deletedAt)));
+    if (taken) return (await withChecklists(tx, [taken]))[0];
+    // why: a tombstone keeps the series from bringing the occurrence back
+    const [gone] = await tx.select({ id: tasks.id }).from(tasks).where(pair);
+    if (gone) return null;
+    if (!validCalendarDate(date)) return null;
+    if (!occurrences(seriesOf(series), date, date).length) return null;
+    return virtualTask(series, date);
+  });
+}
+
+export async function listLists(userId: string): Promise<TaskList[]> {
+  return db
+    .select(listColumns)
+    .from(lists)
+    .where(eq(lists.userId, userId))
+    .orderBy(...listOrder);
+}
+
 async function searchTarget(userId: string, id: string) {
   const [stored] = await db
     .select({ id: tasks.id, date: tasks.date })
@@ -1036,18 +1088,15 @@ export async function readWeek(
   now: Date,
 ): Promise<WeekView> {
   const { week, focus } = weekQuery.parse(input);
-  const [user] = await db
-    .select({ timeZone: users.timeZone, weekStartsOn: users.weekStartsOn })
-    .from(users)
-    .where(eq(users.id, userId));
-  // why: before the browser reports a zone "today" is only a guess, so nothing is moved onto it
-  const today = todayIn(user.timeZone ?? "UTC", now);
-  if (user.timeZone) await rollOverUnfinishedTasks(userId, today);
+  const { timeZone, weekStartsOn, today } = await preparePlannerRead(
+    userId,
+    now,
+  );
   const target = focus ? await searchTarget(userId, focus) : undefined;
-  const dates = weekOf(target?.date ?? week ?? today, user.weekStartsOn);
+  const dates = weekOf(target?.date ?? week ?? today, weekStartsOn);
   return {
-    timeZone: user.timeZone,
-    weekStartsOn: user.weekStartsOn,
+    timeZone,
+    weekStartsOn,
     today,
     dates,
     focusId: target?.id,

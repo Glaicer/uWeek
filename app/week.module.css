@@ -432,6 +432,7 @@ a.calendarRow:not([aria-current="true"]):focus {
 }
 
 .menuItem {
+  display: block;
   width: 100%;
   padding: 8px 16px;
   border: 0;
@@ -439,6 +440,7 @@ a.calendarRow:not([aria-current="true"]):focus {
   color: var(--text);
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
