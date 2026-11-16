@@ -751,6 +751,11 @@ button.name {
   background: var(--background);
   box-shadow: 0 4px 16px rgb(29 39 51 / 0.18);
   pointer-events: none;
+  width: max-content;
+}
+
+.ghost .action {
+  display: none;
 }
 
 .flip {

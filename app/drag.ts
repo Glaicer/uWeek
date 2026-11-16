@@ -60,9 +60,10 @@ export function startDrag(
       node.removeAttribute("id");
     ghost.className += ` ${ghostClass}`;
     ghost.setAttribute("aria-hidden", "true");
-    ghost.style.width = `${box.width}px`;
+    ghost.style.maxWidth = `${box.width}px`;
     ghost.style.height = `${box.height}px`;
     document.body.append(ghost);
+    offset.x = Math.min(offset.x, ghost.offsetWidth - 8);
     item.dataset.dragging = "";
     document.documentElement.dataset.dragging = name;
     frame = requestAnimationFrame(tick);
