@@ -110,7 +110,7 @@ test("a user drags tasks within a day, between days and through a list, and find
   }
 });
 
-test("while dragging, a user flips weeks at the window's edge, one week per pause, and drops the task in a later week", async ({
+test("while dragging, a user flips weeks at the window's edge, one week per pass, and drops the task in a later week", async ({
   page,
 }) => {
   const week = page.getByRole("heading", { level: 1 });
@@ -125,9 +125,11 @@ test("while dragging, a user flips weeks at the window's edge, one week per paus
   await page.mouse.down();
   await page.mouse.move(edge.x, edge.y, { steps: 12 });
   await expect(week).toHaveText("Week 47");
-  const flipped = Date.now();
+  await page.waitForTimeout(1500);
+  await expect(week).toHaveText("Week 47");
+  await page.mouse.move(edge.x - 300, edge.y, { steps: 6 });
+  await page.mouse.move(edge.x, edge.y, { steps: 6 });
   await expect(week).toHaveText("Week 48");
-  expect(Date.now() - flipped).toBeGreaterThan(700);
   const monday = region(page, "23 Mon");
   const to = await point(monday.getByRole("button", { name: "Add task" }));
   await page.mouse.move(to.x, to.y, { steps: 12 });

@@ -759,7 +759,7 @@ button.name {
   z-index: 5;
   top: 50%;
   width: 40px;
-  height: 160px;
+  height: 88px;
   place-items: center;
   border-radius: 999px;
   background: var(--hover);
@@ -772,9 +772,9 @@ button.name {
   display: grid;
 }
 
-.flip[data-pressing] {
-  background: var(--accent);
-  color: var(--background);
+.flip[data-hovered] {
+  background: var(--pressed);
+  color: var(--text);
 }
 
 .previous {

@@ -11,7 +11,6 @@ const mouseThreshold = 4;
 const touchDelay = 300;
 const touchTolerance = 8;
 const edge = 48;
-const pressRepeat = 1000;
 let active = false;
 
 // why: iOS Safari only lets a touchmove listener stop scrolling if it was there before the touch began
@@ -46,8 +45,8 @@ export function startDrag(
   let marked: HTMLElement | null = null;
   let frame = 0;
   let armed = false;
-  let pressed: HTMLElement | null = null;
-  let pressedAt = 0;
+  let hovered: HTMLElement | null = null;
+  let inside = false;
   const timer = touch ? setTimeout(begin, touchDelay) : 0;
 
   function begin() {
@@ -103,16 +102,16 @@ export function startDrag(
   }
 
   function press(element: HTMLElement | null) {
-    if (pressed && pressed !== element) delete pressed.dataset.pressing;
+    if (hovered && hovered !== element) delete hovered.dataset.hovered;
+    hovered = element;
     if (!element) {
-      pressed = null;
-      pressedAt = 0;
+      inside = false;
       return;
     }
-    element.dataset.pressing = "";
-    if (element === pressed || Date.now() - pressedAt < pressRepeat) return;
-    pressed = element;
-    pressedAt = Date.now();
+    element.dataset.hovered = "";
+    // why: the press re-renders the target, so one pass is tracked by the pointer being inside, not by the element
+    if (inside) return;
+    inside = true;
     element.click();
   }
 
