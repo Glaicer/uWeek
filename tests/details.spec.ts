@@ -28,7 +28,7 @@ async function addTask(page: Page, day: string, title: string) {
 
 async function open(page: Page, day: string, title: string) {
   await band(page, day)
-    .getByRole("button", { name: `Open ${title}` })
+    .getByRole("button", { name: `Edit ${title}` })
     .click();
   await expect(card(page, title)).toBeVisible();
   return card(page, title);
@@ -75,7 +75,7 @@ test("every field of the task card is saved and survives a reload", async ({
   ).toHaveCount(0);
   for (const reload of [false, true]) {
     if (reload) await page.reload();
-    await expect(row).toHaveAccessibleDescription("Green, Has notes");
+    await expect(row).toHaveAccessibleDescription("Green, Has details");
     details = await open(page, "10 Tue", "Pack bags");
     await expect(details.getByRole("textbox", { name: "Title" })).toHaveValue(
       "Pack bags",
@@ -101,6 +101,13 @@ test("every field of the task card is saved and survives a reload", async ({
   details = await open(page, "10 Tue", "Pack bags");
   await details.getByRole("radio", { name: "No color" }).check();
   await details.getByRole("textbox", { name: "Notes" }).fill("");
+  await details.getByRole("button", { name: "Done" }).click();
+  await page.reload();
+  await expect(row).toHaveAccessibleDescription("Has details");
+
+  details = await open(page, "10 Tue", "Pack bags");
+  for (const item of ["Phone charger", "Passport"])
+    await details.getByRole("button", { name: `Delete ${item}` }).click();
   await details.getByRole("button", { name: "Done" }).click();
   await page.reload();
   await expect(row).toHaveAccessibleDescription("");
@@ -142,7 +149,7 @@ test("a task moves into a list and back onto a date from its card with the keybo
 }) => {
   await addTask(page, "13 Fri", "Read Dune");
   const openButton = band(page, "13 Fri").getByRole("button", {
-    name: "Open Read Dune",
+    name: "Edit Read Dune",
   });
   await openButton.focus();
   await page.keyboard.press("Enter");
@@ -169,7 +176,7 @@ test("a task moves into a list and back onto a date from its card with the keybo
   ).toHaveCount(0);
 
   await band(page, "Someday")
-    .getByRole("button", { name: "Open Read Dune" })
+    .getByRole("button", { name: "Edit Read Dune" })
     .focus();
   await page.keyboard.press("Enter");
   await moveTo.focus();

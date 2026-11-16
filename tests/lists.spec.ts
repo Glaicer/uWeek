@@ -109,9 +109,9 @@ test("the list's tasks complete, rename and delete like a day's", async ({
   await someday(page)
     .getByRole("button", { name: "Edit Fix the bike" })
     .click();
-  const rename = someday(page).getByRole("textbox", { name: "Task title" });
-  await rename.fill("Fix the car");
-  await rename.press("Enter");
+  const card = page.getByRole("dialog", { name: "Fix the bike" });
+  await card.getByRole("textbox", { name: "Title" }).fill("Fix the car");
+  await card.getByRole("button", { name: "Done" }).click();
   await expect(row("Fix the car")).toBeVisible();
   await page.reload();
 

@@ -42,10 +42,10 @@ test("a user writes tasks into empty rows, completes, renames and deletes them, 
   );
 
   await sunday.getByRole("button", { name: "Edit Call mum" }).click();
-  const rename = sunday.getByRole("textbox", { name: "Task title" });
-  await rename.fill("Call dad");
-  await rename.press("Enter");
-  await expect(rename).toHaveCount(0);
+  const card = page.getByRole("dialog", { name: "Call mum" });
+  await card.getByRole("textbox", { name: "Title" }).fill("Call dad");
+  await card.getByRole("textbox", { name: "Title" }).press("Escape");
+  await expect(card).toHaveCount(0);
 
   await sunday.getByRole("button", { name: "Delete Water plants" }).click();
 
@@ -66,11 +66,15 @@ test("a user writes tasks into empty rows, completes, renames and deletes them, 
     );
   }
 
+  const saved = page.waitForResponse(
+    (response) => response.request().method() === "POST",
+  );
   await task(sunday, "Buy milk").click();
   await expect(task(sunday, "Buy milk")).toHaveAttribute(
     "aria-pressed",
     "false",
   );
+  await saved;
   await page.reload();
   await expect(task(sunday, "Buy milk")).toHaveAttribute(
     "aria-pressed",

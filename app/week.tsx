@@ -288,24 +288,14 @@ function CalendarIcon() {
   );
 }
 
-function NotesIcon() {
-  return (
-    <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M4 11h12v2H4zm0-5h16v2H4zm0 12h7.235v-2H4z"
-      />
-    </svg>
-  );
-}
-
 function DetailsIcon() {
   return (
     <svg width="1em" height="1em" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="currentColor"
-        d="M12 10c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2m6 0c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2M6 10c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2"
+        d="m19.94 7.68l-.03-.09a.8.8 0 0 0-.2-.29l-5-5c-.09-.09-.19-.15-.29-.2l-.09-.03a.8.8 0 0 0-.26-.05c-.02 0-.04-.01-.06-.01H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-12s-.01-.04-.01-.06c0-.09-.02-.17-.05-.26ZM6 20V4h7v4c0 .55.45 1 1 1h4v11z"
       />
+      <path fill="currentColor" d="M8 11h8v2H8zm0 4h8v2H8zm0-8h3v2H8z" />
     </svg>
   );
 }
@@ -338,79 +328,53 @@ function TaskRow({
   task,
   onChanged,
   onDeleted,
-  onOpen,
+  onEdit,
 }: {
   task: Task;
   onChanged: (task: Task) => void;
   onDeleted: (id: string) => void;
-  onOpen: () => void;
+  onEdit: () => void;
 }) {
-  const [renamed, setRenamed] = useState<string | null>(null);
   const [completed, setCompleted] = useOptimistic(task.completed);
   const { save, alert } = useSave();
-  const change = (edits: TaskEdits) =>
-    save(async () => onChanged(await updateTask(task.id, edits)));
-
-  async function rename() {
-    if (renamed === null) return;
-    const title = renamed.trim();
-    if (!title || title === task.title || (await change({ title })))
-      setRenamed(null);
-  }
+  const detailed = task.notes !== "" || task.checklist.length > 0;
 
   return (
     <div
       className={`${styles.row} ${styles.task} ${styles.tinted} ${completed ? styles.done : ""}`}
       data-color={task.color ?? undefined}
     >
-      {renamed === null ? (
-        <button
-          className={styles.name}
-          type="button"
-          aria-pressed={completed}
-          aria-description={
-            [task.color && colorName(task.color), task.notes && "Has notes"]
-              .filter(Boolean)
-              .join(", ") || undefined
-          }
-          onClick={() =>
-            startTransition(async () => {
-              setCompleted(!completed);
-              await change({ completed: !completed });
-            })
-          }
-        >
-          <span className={styles.label}>{task.title}</span>
-          {task.notes && (
-            <span className={styles.mark}>
-              <NotesIcon />
-            </span>
-          )}
-        </button>
-      ) : (
-        <TitleInput
-          label="Task title"
-          value={renamed}
-          onChange={setRenamed}
-          onSubmit={rename}
-          onCancel={() => setRenamed(null)}
-        />
-      )}
+      <button
+        className={styles.name}
+        type="button"
+        aria-pressed={completed}
+        aria-description={
+          [task.color && colorName(task.color), detailed && "Has details"]
+            .filter(Boolean)
+            .join(", ") || undefined
+        }
+        onClick={() =>
+          startTransition(async () => {
+            setCompleted(!completed);
+            await save(async () =>
+              onChanged(await updateTask(task.id, { completed: !completed })),
+            );
+          })
+        }
+      >
+        {detailed && (
+          <span className={styles.mark}>
+            <DetailsIcon />
+          </span>
+        )}
+        <span className={styles.label}>{task.title}</span>
+      </button>
       {alert}
       <button
         className={styles.action}
         type="button"
-        aria-label={`Open ${task.title}`}
-        title="Details"
-        onClick={onOpen}
-      >
-        <DetailsIcon />
-      </button>
-      <button
-        className={styles.action}
-        type="button"
         aria-label={`Edit ${task.title}`}
-        onClick={() => setRenamed(task.title)}
+        onClick={onEdit}
       >
         <EditIcon />
       </button>
@@ -1455,7 +1419,7 @@ export function Week({
           task={task}
           onChanged={replace}
           onDeleted={remove}
-          onOpen={() => setOpenId(task.id)}
+          onEdit={() => setOpenId(task.id)}
         />
       )),
       ...draftsByPlace[index].map((draft) => (
