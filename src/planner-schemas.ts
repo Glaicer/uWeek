@@ -11,8 +11,8 @@ export const title = z.string().trim().min(1).max(500);
 export const occurrenceId = /^([0-9a-f-]{36})_(\d{4}-\d{2}-\d{2})$/;
 export const taskId = z.union([z.uuid(), z.string().regex(occurrenceId)]);
 export const scope = z.enum(["this", "following"]);
-export const interval = z.int().min(1).max(999);
-export const until = isoDate.nullable();
+const interval = z.int().min(1).max(999);
+const until = isoDate.nullable();
 export const repeat = z.discriminatedUnion("every", [
   z.object({ every: z.literal("day"), interval, until }),
   z.object({
@@ -23,6 +23,7 @@ export const repeat = z.discriminatedUnion("every", [
       .array(z.literal([0, 1, 2, 3, 4, 5, 6]))
       .min(1)
       .max(7)
+      // why: overwrite keeps input and output identical, so repeat converts to JSON Schema
       .overwrite((days) => [...new Set(days)].sort()),
   }),
   z.object({
@@ -34,7 +35,7 @@ export const repeat = z.discriminatedUnion("every", [
   z.object({ every: z.literal("year"), interval, until }),
 ]);
 export const range = z.object({ from: isoDate, to: isoDate });
-export const index = z.int().min(0).optional();
+const index = z.int().min(0).optional();
 export const placement = z.xor([
   z.object({ date: isoDate, index }),
   z.object({ listId: z.uuid(), index }),

@@ -908,3 +908,50 @@ test("getTask reads stored and virtual occurrences without materializing a futur
     date: "2026-11-12",
   });
 });
+
+test("deleting this and following removes an unfinished occurrence moved off its day", async () => {
+  const user = await newUser();
+  const task = await createTask(user, {
+    title: "Walk",
+    date: "2026-11-09",
+  });
+  await updateTask(user, task.id, { repeat: daily });
+  const before = await listTasks(user, week);
+
+  await updateTask(user, before[2].id, {
+    placement: { date: "2026-11-20" },
+  });
+  expect(await deleteTask(user, before[1].id, "following")).toBe(true);
+  expect(
+    placesOf(await listTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
+  ).toEqual([["2026-11-09", "Walk", false]]);
+});
+
+test("changing the rule deletes materialized unfinished occurrences after the split", async () => {
+  const user = await newUser();
+  const task = await createTask(user, {
+    title: "Gym",
+    date: "2026-11-09",
+  });
+  await updateTask(user, task.id, { repeat: daily });
+  const before = await listTasks(user, week);
+  await updateTask(user, before[2].id, { completed: true });
+  await updateTask(user, before[2].id, { completed: false });
+
+  await updateTask(
+    user,
+    before[1].id,
+    {
+      repeat: { every: "week", interval: 1, weekdays: [2], until: null },
+    },
+    "following",
+  );
+  expect(
+    placesOf(await listTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
+  ).toEqual([
+    ["2026-11-09", "Gym", false],
+    ["2026-11-10", "Gym", false],
+    ["2026-11-17", "Gym", false],
+    ["2026-11-24", "Gym", false],
+  ]);
+});

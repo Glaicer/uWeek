@@ -59,12 +59,31 @@ test("OpenAPI is generated from the shared planner schemas", () => {
     name: string;
     schema: unknown;
   }[];
+  expect(parameters.map((parameter) => parameter.name).sort()).toEqual([
+    "completed",
+    "from",
+    "listId",
+    "q",
+    "to",
+  ]);
   expect(
     parameters.find((parameter) => parameter.name === "from")?.schema,
   ).toEqual(jsonSchema(isoDate));
   expect(
+    parameters.find((parameter) => parameter.name === "to")?.schema,
+  ).toEqual(jsonSchema(isoDate));
+  expect(
+    parameters.find((parameter) => parameter.name === "completed")?.schema,
+  ).toMatchObject({ enum: ["true", "false"] });
+  expect(
+    parameters.find((parameter) => parameter.name === "listId")?.schema,
+  ).toMatchObject({ format: "uuid" });
+  expect(
     parameters.find((parameter) => parameter.name === "q")?.schema,
   ).toMatchObject({ minLength: 1, maxLength: 500 });
+  const description = document.paths!["/tasks"].get!.description!;
+  expect(description).toContain("never both");
+  expect(description).toContain("366");
 
   const taskIdParameter = document.paths!["/tasks/{id}"].get!.parameters as {
     name: string;

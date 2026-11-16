@@ -60,6 +60,7 @@ const guarded = {
 const taskParameters = z.object({ id: taskId });
 const listParameters = z.object({ id: listId });
 
+// why: requestParams needs a ZodObject, so the cross-field rules live in the description
 const taskQueryParameters = z.strictObject({
   from: isoDate.optional(),
   to: isoDate.optional(),
@@ -97,7 +98,7 @@ export function createOpenApiDocument(): ReturnType<typeof createDocument> {
         get: {
           summary: "List tasks",
           description:
-            "Pass either `from` and `to` or `listId`, never both. `completed` filters by completion and `q` matches the title or notes literally, case-insensitively.",
+            "Pass either `from` and `to` together or `listId`, never both. A range is inclusive and may span at most 366 days. `completed` filters by completion and `q` matches the title or notes literally, case-insensitively.",
           requestParams: { query: taskQueryParameters },
           responses: {
             "200": {

@@ -29,13 +29,12 @@ const tokenColumns = {
   lastUsedAt: apiTokens.lastUsedAt,
 };
 
-const infoOf = (row: {
-  id: string;
-  name: string;
-  prefix: string;
-  createdAt: Date;
-  lastUsedAt: Date | null;
-}): ApiTokenInfo => ({
+type TokenRow = Pick<
+  typeof apiTokens.$inferSelect,
+  "id" | "name" | "prefix" | "createdAt" | "lastUsedAt"
+>;
+
+const infoOf = (row: TokenRow): ApiTokenInfo => ({
   id: row.id,
   name: row.name,
   prefix: row.prefix,

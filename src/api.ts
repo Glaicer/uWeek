@@ -54,10 +54,11 @@ function decodeSegment(segment: string): string {
 
 function segmentsOf(pathname: string): string[] {
   if (!pathname.startsWith(`${prefix}/`)) return [];
-  return pathname
+  const segments = pathname
     .slice(prefix.length + 1)
     .split("/")
     .map(decodeSegment);
+  return segments.some((segment) => segment === "") ? [] : segments;
 }
 
 function queryOf(url: URL): Record<string, string> {
