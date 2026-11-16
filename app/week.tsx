@@ -456,6 +456,12 @@ function TaskRow({
     if (focusVisit === undefined) return;
     button.current?.focus({ preventScroll: true });
     button.current?.scrollIntoView({ block: "center" });
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const animation = button.current?.parentElement?.animate(
+      [{ backgroundColor: "#dcefe1" }, { backgroundColor: "transparent" }],
+      { duration: 650, easing: "ease-out" },
+    );
+    return () => animation?.cancel();
   }, [focusVisit]);
   const [completed, setCompleted] = useOptimistic(task.completed);
   const { save, alert } = useSave();

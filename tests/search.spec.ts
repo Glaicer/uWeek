@@ -67,6 +67,22 @@ test("search opens from the header, finds a future task and highlights it on its
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 900 });
+  const edit = band(page, "08 Tue").getByRole("button", {
+    name: "Edit Orchid care",
+  });
+  const remove = band(page, "08 Tue").getByRole("button", {
+    name: "Delete Orchid care",
+  });
+  await page.mouse.move(0, 0);
+  await expect(found).toBeFocused();
+  await expect(edit).toHaveCSS("opacity", "0");
+  await expect(remove).toHaveCSS("opacity", "0");
+  await found.hover();
+  await expect(edit).toHaveCSS("opacity", "1");
+  await expect(remove).toHaveCSS("opacity", "1");
+  await page.mouse.move(0, 0);
+  await expect(edit).toHaveCSS("opacity", "0");
+  await expect(remove).toHaveCSS("opacity", "0");
   await page.screenshot({
     path: ".scratch/yourweek-cloud/issues/09-screenshots/highlight-1440.png",
     fullPage: true,
