@@ -29,6 +29,13 @@
       "when": 1794735816301,
       "tag": "0003_someday_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794816957717,
+      "tag": "0004_task_details",
+      "breakpoints": true
     }
   ]
 }

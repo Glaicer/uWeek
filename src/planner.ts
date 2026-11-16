@@ -1,14 +1,32 @@
-import { and, asc, between, eq, isNotNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  between,
+  eq,
+  inArray,
+  isNotNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import { todayIn, validCalendarDate, weekOf, type WeekStart } from "./calendar";
 import { db } from "./db/client";
-import { lists, tasks, users } from "./db/schema";
-import type { Placement } from "./model";
+import { checklistItems, lists, tasks, users } from "./db/schema";
+import { taskColorValues, type Placement, type TaskColor } from "./model";
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
 
 export type Task = {
   id: string;
   title: string;
   completed: boolean;
+  notes: string;
+  color: TaskColor | null;
+  checklist: ChecklistItem[];
 } & Placement;
 
 export interface TaskList {
@@ -20,6 +38,10 @@ const isoDate = z.string().refine(validCalendarDate, "Invalid date");
 const title = z.string().trim().min(1).max(500);
 const taskId = z.uuid();
 const range = z.object({ from: isoDate, to: isoDate });
+const placement = z.xor([
+  z.object({ date: isoDate }),
+  z.object({ listId: z.uuid() }),
+]);
 const newTask = z.xor([
   z.object({ title, date: isoDate }),
   z.object({ title, listId: z.uuid() }),
@@ -28,9 +50,19 @@ const newList = z.object({ title });
 const listId = z.uuid();
 const listMove = z.object({ to: z.int().min(0) });
 const edits = z
-  .object({ title: title.optional(), completed: z.boolean().optional() })
+  .object({
+    title: title.optional(),
+    completed: z.boolean().optional(),
+    notes: z.string().max(10_000).optional(),
+    color: z.enum(taskColorValues).nullable().optional(),
+    checklist: z
+      .array(z.object({ id: z.uuid(), text: title, completed: z.boolean() }))
+      .max(200)
+      .optional(),
+    placement: placement.optional(),
+  })
   .refine(
-    (edits) => edits.title !== undefined || edits.completed !== undefined,
+    (edits) => Object.values(edits).some((edit) => edit !== undefined),
     "Nothing to change",
   );
 
@@ -74,19 +106,16 @@ const taskColumns = {
   date: tasks.date,
   listId: tasks.listId,
   completed: sql<boolean>`${tasks.completedAt} is not null`,
+  notes: tasks.notes,
+  color: tasks.color,
 };
 
-function toTask({
-  date,
-  listId,
-  ...task
-}: {
-  id: string;
-  title: string;
-  completed: boolean;
+type TaskRecord = Omit<Task, "date" | "listId"> & {
   date: string | null;
   listId: string | null;
-}): Task {
+};
+
+function toTask({ date, listId, ...task }: TaskRecord): Task {
   if (date !== null) return { ...task, date };
   if (listId !== null) return { ...task, listId };
   throw new Error(`Task ${task.id} has neither a date nor a list`);
@@ -101,6 +130,37 @@ const taskOrder = [
 
 const listColumns = { id: lists.id, title: lists.title };
 const listOrder = [asc(lists.position), asc(lists.createdAt), asc(lists.id)];
+
+async function withChecklists(
+  executor: Pick<typeof db, "select">,
+  rows: Omit<TaskRecord, "checklist">[],
+): Promise<Task[]> {
+  const items = rows.length
+    ? await executor
+        .select({
+          taskId: checklistItems.taskId,
+          id: checklistItems.id,
+          text: checklistItems.text,
+          completed: checklistItems.completed,
+        })
+        .from(checklistItems)
+        .where(
+          inArray(
+            checklistItems.taskId,
+            rows.map((row) => row.id),
+          ),
+        )
+        .orderBy(asc(checklistItems.position))
+    : [];
+  return rows.map((row) =>
+    toTask({
+      ...row,
+      checklist: items
+        .filter((item) => item.taskId === row.id)
+        .map(({ id, text, completed }) => ({ id, text, completed })),
+    }),
+  );
+}
 
 const ownedList = (userId: string, id: string) =>
   and(eq(lists.userId, userId), eq(lists.id, listId.parse(id)));
@@ -118,7 +178,7 @@ export async function listTasks(
     .from(tasks)
     .where(and(eq(tasks.userId, userId), between(tasks.date, from, to)))
     .orderBy(...taskOrder);
-  return rows.map(toTask);
+  return withChecklists(db, rows);
 }
 
 async function listsAndTheirTasks(userId: string, from: string, to: string) {
@@ -139,18 +199,19 @@ async function listsAndTheirTasks(userId: string, from: string, to: string) {
       )
       .orderBy(...taskOrder),
   ]);
-  return { lists: userLists, tasks: rows.map(toTask) };
+  return { lists: userLists, tasks: await withChecklists(db, rows) };
 }
+
+type TaskPlacement = z.output<typeof placement>;
+
+const endOf = (userId: string, place: TaskPlacement) =>
+  sql`(select coalesce(max(${tasks.position}), -1) + 1 from ${tasks} where ${tasks.userId} = ${userId} and ${"date" in place ? eq(tasks.date, place.date) : eq(tasks.listId, place.listId)})`;
 
 export async function createTask(
   userId: string,
   input: z.input<typeof newTask>,
 ): Promise<Task> {
   const { title, ...placement } = newTask.parse(input);
-  const sibling =
-    "date" in placement
-      ? eq(tasks.date, placement.date)
-      : eq(tasks.listId, placement.listId);
   const [task] = await db
     .insert(tasks)
     .values({
@@ -158,10 +219,10 @@ export async function createTask(
       userId,
       title,
       ...placement,
-      position: sql`(select coalesce(max(${tasks.position}), -1) + 1 from ${tasks} where ${tasks.userId} = ${userId} and ${sibling})`,
+      position: endOf(userId, placement),
     })
     .returning(taskColumns);
-  return toTask(task);
+  return toTask({ ...task, checklist: [] });
 }
 
 export async function createList(
@@ -245,17 +306,46 @@ export async function updateTask(
   id: string,
   input: TaskEdits,
 ): Promise<Task | null> {
-  const { title, completed } = edits.parse(input);
-  const [task] = await db
-    .update(tasks)
-    .set({
-      title,
-      completedAt:
-        completed === undefined ? undefined : completed ? sql`now()` : null,
-    })
-    .where(owned(userId, id))
-    .returning(taskColumns);
-  return task ? toTask(task) : null;
+  const { completed, checklist, placement, ...fields } = edits.parse(input);
+  return db.transaction(async (tx) => {
+    const [task] = await tx
+      .update(tasks)
+      .set({
+        ...fields,
+        completedAt:
+          completed === undefined ? undefined : completed ? sql`now()` : null,
+        ...(placement && moveTo(userId, placement)),
+        // why: an edit of the checklist alone leaves nothing else to set, and drizzle refuses an empty set
+        updatedAt: new Date(),
+      })
+      .where(owned(userId, id))
+      .returning(taskColumns);
+    if (!task) return null;
+    if (checklist) {
+      await tx.delete(checklistItems).where(eq(checklistItems.taskId, task.id));
+      if (checklist.length)
+        await tx.insert(checklistItems).values(
+          checklist.map((item, position) => ({
+            ...item,
+            taskId: task.id,
+            position,
+          })),
+        );
+    }
+    const [read] = await withChecklists(tx, [task]);
+    return read;
+  });
+}
+
+function moveTo(userId: string, to: TaskPlacement) {
+  const date = "date" in to ? to.date : null;
+  const listId = "listId" in to ? to.listId : null;
+  // why: a task already in that place keeps its row; one that arrives goes to the end
+  return {
+    date,
+    listId,
+    position: sql`case when ${tasks.date} is not distinct from ${date}::date and ${tasks.listId} is not distinct from ${listId}::text then ${tasks.position} else ${endOf(userId, to)} end`,
+  };
 }
 
 export async function deleteTask(userId: string, id: string): Promise<boolean> {

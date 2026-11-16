@@ -50,7 +50,15 @@ test("a user sees only their own tasks and cannot change or delete another user'
   expect(await deleteTask(bob, task.id)).toBe(false);
 
   expect(await listTasks(alice, week)).toEqual([
-    { id: task.id, title: "Buy milk", date: "2026-11-14", completed: false },
+    {
+      id: task.id,
+      title: "Buy milk",
+      date: "2026-11-14",
+      completed: false,
+      notes: "",
+      color: null,
+      checklist: [],
+    },
   ]);
 });
 
@@ -211,6 +219,9 @@ test("a user writes tasks into a list and finds the list with its tasks in order
     title: "Milk",
     listId: errands.id,
     completed: false,
+    notes: "",
+    color: null,
+    checklist: [],
   });
 });
 
@@ -273,4 +284,117 @@ test("a user neither sees nor changes another user's lists and cannot write into
   const view = await readWeek(alice, {}, new Date());
   expect(view.lists.map((list) => list.title)).toEqual(["Private", "Second"]);
   expect(view.tasks.map((task) => task.title)).toEqual(["Secret"]);
+});
+
+test("a user writes a note and picks a color for a task, and finds both with the week", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Gym", date: "2026-11-13" });
+  expect(task).toMatchObject({ notes: "", color: null, checklist: [] });
+
+  expect(
+    await updateTask(user, task.id, {
+      notes: "Legs day\nBring towel",
+      color: "green",
+    }),
+  ).toMatchObject({ notes: "Legs day\nBring towel", color: "green" });
+  expect((await listTasks(user, week))[0]).toMatchObject({
+    notes: "Legs day\nBring towel",
+    color: "green",
+  });
+
+  await updateTask(user, task.id, { notes: "", color: null });
+  expect(
+    (await readWeek(user, {}, new Date("2026-11-13T10:00:00Z"))).tasks,
+  ).toEqual([
+    expect.objectContaining({ title: "Gym", notes: "", color: null }),
+  ]);
+  await expect(
+    updateTask(user, task.id, { color: "pink" as never }),
+  ).rejects.toThrow();
+});
+
+test("a task's checklist keeps its items, their marks and their order", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Trip", date: "2026-11-13" });
+  const [tickets, passport, charger] = ["Tickets", "Passport", "Charger"].map(
+    (text) => ({ id: crypto.randomUUID(), text, completed: false }),
+  );
+  const checklistOf = async () => (await listTasks(user, week))[0].checklist;
+
+  await updateTask(user, task.id, { checklist: [tickets, passport, charger] });
+  expect(await checklistOf()).toEqual([tickets, passport, charger]);
+
+  const done = { ...passport, completed: true };
+  const renamed = { ...charger, text: "Phone charger" };
+  await updateTask(user, task.id, { checklist: [renamed, done] });
+  expect(await checklistOf()).toEqual([renamed, done]);
+  expect((await listTasks(user, week))[0].title).toBe("Trip");
+
+  await expect(
+    updateTask(user, task.id, {
+      checklist: [{ id: crypto.randomUUID(), text: " ", completed: false }],
+    }),
+  ).rejects.toThrow();
+  expect(await checklistOf()).toEqual([renamed, done]);
+});
+
+test("a user cannot read, change or move another user's task details", async () => {
+  const alice = await newUser();
+  const bob = await newUser();
+  const bobs = await createList(bob, { title: "Bob's" });
+  const task = await createTask(alice, { title: "Secret", date: "2026-11-13" });
+  const item = { id: crypto.randomUUID(), text: "Hidden", completed: false };
+  await updateTask(alice, task.id, { notes: "Private", checklist: [item] });
+
+  expect(
+    await updateTask(bob, task.id, {
+      notes: "Hacked",
+      checklist: [],
+      placement: { listId: bobs.id },
+    }),
+  ).toBeNull();
+  await expect(
+    updateTask(alice, task.id, { placement: { listId: bobs.id } }),
+  ).rejects.toThrow();
+  expect(await listTasks(alice, week)).toEqual([
+    expect.objectContaining({
+      date: "2026-11-13",
+      notes: "Private",
+      checklist: [item],
+    }),
+  ]);
+});
+
+test("a task moves to another date or into a list, landing at the end; staying put keeps its place", async () => {
+  const user = await newUser();
+  const inbox = await createList(user, { title: "Inbox" });
+  await createTask(user, { title: "Waiting", listId: inbox.id });
+  const gym = await createTask(user, { title: "Gym", date: "2026-11-13" });
+  await createTask(user, { title: "Dentist", date: "2026-11-13" });
+  await createTask(user, { title: "Haircut", date: "2026-11-10" });
+  const titlesOn = async (date: string) =>
+    (await listTasks(user, week))
+      .filter((task) => task.date === date)
+      .map((task) => task.title);
+
+  await updateTask(user, gym.id, { placement: { date: "2026-11-13" } });
+  expect(await titlesOn("2026-11-13")).toEqual(["Gym", "Dentist"]);
+
+  expect(
+    await updateTask(user, gym.id, { placement: { date: "2026-11-10" } }),
+  ).toMatchObject({ date: "2026-11-10" });
+  expect(await titlesOn("2026-11-10")).toEqual(["Haircut", "Gym"]);
+
+  const moved = await updateTask(user, gym.id, {
+    placement: { listId: inbox.id },
+  });
+  expect(moved).toMatchObject({ listId: inbox.id });
+  expect(moved).not.toHaveProperty("date");
+  const view = await readWeek(user, {}, new Date("2026-11-10T10:00:00Z"));
+  expect(
+    view.tasks
+      .filter((task) => task.listId === inbox.id)
+      .map((task) => task.title),
+  ).toEqual(["Waiting", "Gym"]);
+  expect(await titlesOn("2026-11-10")).toEqual(["Haircut"]);
 });

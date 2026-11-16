@@ -26,6 +26,7 @@ export const taskColors = {
 } as const;
 
 export type TaskColor = keyof typeof taskColors;
+export const taskColorValues = Object.keys(taskColors) as TaskColor[];
 export type TaskEdits = Pick<
   Task,
   "title" | "notes" | "color" | "completed" | "checklist" | "placement"

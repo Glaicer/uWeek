@@ -13,6 +13,7 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import type { WeekStart } from "../calendar";
+import { taskColorValues, type TaskColor } from "../model";
 
 const createdAt = () =>
   timestamp({ withTimezone: true }).defaultNow().notNull();
@@ -118,6 +119,8 @@ export const tasks = pgTable(
     date: date({ mode: "string" }),
     listId: text(),
     position: integer().notNull(),
+    notes: text().default("").notNull(),
+    color: text().$type<TaskColor>(),
     completedAt: timestamp({ withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -134,5 +137,25 @@ export const tasks = pgTable(
       "tasks_date_xor_list",
       sql`(${table.date} is null) <> (${table.listId} is null)`,
     ),
+    check(
+      "tasks_color",
+      sql`${table.color} in (${sql.raw(
+        taskColorValues.map((color) => `'${color}'`).join(", "),
+      )})`,
+    ),
   ],
+);
+
+export const checklistItems = pgTable(
+  "checklist_items",
+  {
+    id: text().primaryKey(),
+    taskId: text()
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    text: text().notNull(),
+    completed: boolean().default(false).notNull(),
+    position: integer().notNull(),
+  },
+  (table) => [index().on(table.taskId, table.position)],
 );
