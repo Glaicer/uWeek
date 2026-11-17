@@ -8,6 +8,12 @@ import { createList } from "./planner";
 
 const signInLinkMinutes = 5;
 
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+export const googleSignInEnabled = Boolean(
+  googleClientId && googleClientSecret,
+);
+
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", usePlural: true }),
   databaseHooks: {
@@ -17,6 +23,13 @@ export const auth = betterAuth({
           await createList(user.id, { title: "Inbox" });
         },
       },
+    },
+  },
+  socialProviders: {
+    google: {
+      clientId: googleClientId ?? "",
+      clientSecret: googleClientSecret ?? "",
+      enabled: googleSignInEnabled, // why: dev without a Google client keeps working; better-auth skips a disabled provider
     },
   },
   plugins: [

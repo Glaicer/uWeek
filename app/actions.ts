@@ -42,6 +42,19 @@ export async function requestSignInLink(
   return { status: "sent", email };
 }
 
+export async function signInWithGoogle(): Promise<void> {
+  const { url } = await auth.api.signInSocial({
+    body: {
+      provider: "google",
+      callbackURL: "/",
+      errorCallbackURL: "/sign-in?provider=google",
+    },
+    headers: await headers(),
+  });
+  if (!url) throw new Error("Google sign-in returned no URL");
+  redirect(url);
+}
+
 export async function signOut(): Promise<void> {
   await auth.api.signOut({ headers: await headers() });
   redirect("/sign-in");

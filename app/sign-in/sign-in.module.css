@@ -89,3 +89,44 @@
   margin: 8px 0 0;
   color: var(--accent);
 }
+
+.or {
+  margin: 24px 0 0;
+  color: var(--secondary);
+  font-size: 14px;
+}
+
+.google {
+  justify-self: start;
+  margin-top: 12px;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    transform 0.08s;
+}
+
+@media (hover: hover) {
+  .google:hover {
+    background: var(--hover);
+  }
+}
+
+.google:focus {
+  outline: none;
+}
+
+.google:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.google:active {
+  background: var(--pressed);
+  transform: translateY(1px);
+}
