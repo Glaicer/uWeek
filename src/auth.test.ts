@@ -1,12 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { GET, POST } from "../app/api/auth/[...all]/route";
+import { testAuthUrl, testGoogleClientId } from "../tests/auth";
 import { auth } from "./auth";
 import { db } from "./db/client";
 import { accounts, users } from "./db/schema";
 import { createList, listLists } from "./planner";
 
-const origin = "http://127.0.0.1:4200";
+const origin = testAuthUrl;
 
 function cookiePairs(response: Response): string[] {
   return response.headers.getSetCookie().map((cookie) => cookie.split(";")[0]);
@@ -29,7 +30,7 @@ function unsignedIdToken(claims: {
     encode({ alg: "none", typ: "JWT" }),
     encode({
       iss: "https://accounts.google.com",
-      aud: "vitest-google-client-id",
+      aud: testGoogleClientId,
       iat: now,
       exp: now + 3600,
       ...claims,
@@ -83,8 +84,12 @@ async function finishGoogleSignIn(identity: {
       }),
     });
   });
+  return googleCallback(`code=code&state=${state}`, cookie);
+}
+
+function googleCallback(query: string, cookie: string): Promise<Response> {
   return GET(
-    new Request(`${origin}/api/auth/callback/google?code=code&state=${state}`, {
+    new Request(`${origin}/api/auth/callback/google?${query}`, {
       headers: { cookie },
     }),
   );
@@ -96,7 +101,7 @@ function sessionCookie(response: Response): string | undefined {
   );
 }
 
-async function userFromEmailLink(email: string): Promise<string> {
+async function userWithInbox(email: string): Promise<string> {
   const id = crypto.randomUUID();
   await db.insert(users).values({ id, name: "", email, emailVerified: true });
   await createList(id, { title: "Inbox" });
@@ -136,7 +141,7 @@ test("a new Google user is signed in with one Inbox", async () => {
 
 test("a verified Google email signs in to the account made by email link", async () => {
   const email = `linked-${crypto.randomUUID()}@example.com`;
-  const id = await userFromEmailLink(email);
+  const id = await userWithInbox(email);
 
   const response = await finishGoogleSignIn({ email, emailVerified: true });
 
@@ -157,7 +162,7 @@ test("a verified Google email signs in to the account made by email link", async
 
 test("an unverified Google email does not join the existing account", async () => {
   const email = `unverified-${crypto.randomUUID()}@example.com`;
-  const id = await userFromEmailLink(email);
+  const id = await userWithInbox(email);
 
   const response = await finishGoogleSignIn({ email, emailVerified: false });
 
@@ -181,11 +186,9 @@ test("cancelling at Google returns to sign-in", async () => {
     throw new Error(`Unexpected fetch to ${requestUrl(input)}`);
   });
 
-  const response = await GET(
-    new Request(
-      `${origin}/api/auth/callback/google?error=access_denied&state=${state}`,
-      { headers: { cookie } },
-    ),
+  const response = await googleCallback(
+    `error=access_denied&state=${state}`,
+    cookie,
   );
 
   expect(response.status).toBe(302);

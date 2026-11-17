@@ -38,14 +38,11 @@
   border-bottom-color: var(--accent);
 }
 
-.submit {
+.submit,
+.google {
   justify-self: start;
-  margin-top: 24px;
   padding: 10px 20px;
-  border: 0;
   border-radius: 999px;
-  background: var(--text);
-  color: var(--background);
   font: inherit;
   cursor: pointer;
   transition:
@@ -53,23 +50,48 @@
     transform 0.08s;
 }
 
+.submit {
+  margin-top: 24px;
+  border: 0;
+  background: var(--text);
+  color: var(--background);
+}
+
+.google {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--text);
+}
+
 @media (hover: hover) {
   .submit:hover {
     background: var(--primary-hover);
   }
+
+  .google:hover {
+    background: var(--hover);
+  }
 }
 
-.submit:focus {
+.submit:focus,
+.google:focus {
   outline: none;
 }
 
-.submit:focus-visible {
+.submit:focus-visible,
+.google:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .submit:active {
   background: var(--primary-pressed);
+  transform: translateY(1px);
+}
+
+.google:active {
+  background: var(--pressed);
   transform: translateY(1px);
 }
 
@@ -94,39 +116,4 @@
   margin: 24px 0 0;
   color: var(--secondary);
   font-size: 14px;
-}
-
-.google {
-  justify-self: start;
-  margin-top: 12px;
-  padding: 10px 20px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--background);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-  transition:
-    background-color 0.12s,
-    transform 0.08s;
-}
-
-@media (hover: hover) {
-  .google:hover {
-    background: var(--hover);
-  }
-}
-
-.google:focus {
-  outline: none;
-}
-
-.google:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.google:active {
-  background: var(--pressed);
-  transform: translateY(1px);
 }
