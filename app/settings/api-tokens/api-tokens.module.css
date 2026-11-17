@@ -168,6 +168,33 @@
   white-space: nowrap;
 }
 
+.connect {
+  margin-top: 40px;
+}
+
+.connect h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.connect p {
+  margin: 0 0 12px;
+  color: var(--secondary);
+  font-size: 14px;
+}
+
+.snippet {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--hover);
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  overflow-x: auto;
+}
+
 @media (max-width: 640px) {
   .table thead {
     position: absolute;

@@ -10,6 +10,19 @@ export default async function ApiTokensPage(): Promise<React.JSX.Element> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/sign-in");
   const tokens = await listApiTokens(session.user.id);
+  const agentConfig = JSON.stringify(
+    {
+      mcpServers: {
+        yourweek: {
+          type: "http",
+          url: new URL("/mcp", process.env.BETTER_AUTH_URL).href,
+          headers: { Authorization: "Bearer YOUR_API_TOKEN" },
+        },
+      },
+    },
+    null,
+    2,
+  );
   return (
     <main className={styles.page}>
       <nav className={styles.links}>
@@ -18,6 +31,16 @@ export default async function ApiTokensPage(): Promise<React.JSX.Element> {
       </nav>
       <h1 className={styles.title}>API tokens</h1>
       <TokenManager tokens={tokens} />
+      <section className={styles.connect} aria-label="Connect an agent">
+        <h2>Connect an agent (MCP)</h2>
+        <p>
+          Add this to your MCP client configuration and replace the token with
+          one from above.
+        </p>
+        <pre className={styles.snippet}>
+          <code>{agentConfig}</code>
+        </pre>
+      </section>
     </main>
   );
 }

@@ -63,7 +63,7 @@ function postgresError(
   return null;
 }
 
-function apiErrorOf(error: unknown): ApiError {
+export function apiErrorOf(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof z.ZodError)
     return new ApiError("invalid_request", "Invalid request");

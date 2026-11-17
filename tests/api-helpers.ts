@@ -15,7 +15,7 @@ export interface ApiUser {
   close(): Promise<void>;
 }
 
-const pinnedNow = "2026-11-09T10:00:00+03:00";
+export const pinnedNow = "2026-11-09T10:00:00+03:00";
 
 export async function issueApiToken(page: Page, name: string): Promise<string> {
   const hide = page.getByRole("button", { name: "Hide token" });
