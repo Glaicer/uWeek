@@ -59,7 +59,11 @@ test("an agent connects with a token and sees the planner tools", async ({
   let client: Client | undefined;
   try {
     client = await connect(baseURL!, user.token);
+    const instructions = client.getInstructions();
+    expect(instructions).toContain("weekly planner");
+    expect(instructions).toContain("YYYY-MM-DD");
     const { tools } = await client.listTools();
+    expect(JSON.stringify(tools)).not.toContain("[0-9a-fA-F]{8}");
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       "complete_task",
       "create_task",
@@ -240,6 +244,12 @@ test("tool errors reach the agent as tool results", async ({
       },
     });
     expect(refused.isError).toBe(true);
+
+    const malformed = await client.callTool({
+      name: "complete_task",
+      arguments: { id: "not-a-task-id" },
+    });
+    expect(malformed.isError).toBe(true);
 
     const theirs = json(
       await otherClient.callTool({

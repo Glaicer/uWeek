@@ -3,6 +3,7 @@ import {
   McpServer,
   type AuthInfo,
   type CallToolResult,
+  type StandardSchemaWithJSON,
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { authorizeApiRequest } from "./api-access";
@@ -40,6 +41,11 @@ interface Caller {
 const datesNote =
   'Dates are calendar dates in YYYY-MM-DD format. "Today" is the current date in the user\'s time zone (list_week returns today and timeZone), not UTC. On reads, unfinished tasks from past days have already been moved to today.';
 
+const dateFormat =
+  'Dates are YYYY-MM-DD; "today" is in the user\'s time zone, as list_week reports.';
+
+const serverInstructions = `YourWeek is the user's weekly planner: tasks placed on days of the week or kept in lists. Use these tools to read the week, tasks and lists, search tasks, and create, update, move, complete or delete tasks. ${datesNote}`;
+
 const idNote =
   'Task ids come from list_week or list_tasks. An occurrence of a repeating task has an id like <uuid>_<YYYY-MM-DD>; scope "following" covers this occurrence and all later ones.';
 
@@ -49,6 +55,34 @@ function callerOf(authInfo: AuthInfo | undefined): Caller {
   if (typeof userId !== "string" || !(now instanceof Date))
     throw new Error("MCP request without a caller");
   return { userId, now };
+}
+
+// why: zod writes its whole UUID regex into every id field; format: "uuid" tells an agent the same in a few tokens
+function toolInput<Shape extends z.ZodRawShape>(shape: Shape) {
+  const schema = z.object(shape);
+  const standard = schema["~standard"];
+  return {
+    "~standard": {
+      ...standard,
+      jsonSchema: {
+        ...standard.jsonSchema,
+        input: (options) =>
+          JSON.parse(
+            JSON.stringify(
+              standard.jsonSchema.input(options),
+              function (this: Record<string, unknown>, key, value: unknown) {
+                return key === "pattern" && this.format === "uuid"
+                  ? undefined
+                  : value;
+              },
+            ),
+          ) as Record<string, unknown>,
+      },
+    },
+  } satisfies StandardSchemaWithJSON<
+    z.input<typeof schema>,
+    z.output<typeof schema>
+  >;
 }
 
 async function requireTask(task: Promise<Task | null>): Promise<Task> {
@@ -61,14 +95,14 @@ async function requireTask(task: Promise<Task | null>): Promise<Task> {
 function plannerServer(caller: Caller): McpServer {
   const server = new McpServer(
     { name: "yourweek", version: "1.0.0" },
-    { instructions: datesNote },
+    { instructions: serverInstructions },
   );
 
   server.registerTool(
     "list_week",
     {
       description: `Read one planner week: its dates, lists and tasks, including repeating occurrences. Without week, the week containing today is read; week is any date in the wanted week. ${datesNote}`,
-      inputSchema: z.object({
+      inputSchema: toolInput({
         week: isoDate
           .optional()
           .describe("Any date (YYYY-MM-DD) in the week to read."),
@@ -83,7 +117,7 @@ function plannerServer(caller: Caller): McpServer {
     "list_tasks",
     {
       description: `Read tasks for a date range or for one list. Pass from and to (inclusive, a range of at most 366 days) or listId, exactly one of them. completed filters by status, text by title or notes. ${datesNote}`,
-      inputSchema: z.object({
+      inputSchema: toolInput({
         from: isoDate.optional().describe("First date, inclusive."),
         to: isoDate.optional().describe("Last date, inclusive."),
         listId: listId.optional().describe("Read only this list."),
@@ -127,7 +161,7 @@ function plannerServer(caller: Caller): McpServer {
     {
       description:
         "Search task titles and notes. A repeating task appears once with repeats: true and its series id — use list_tasks for the id of one occurrence. nextCursor continues to the next page.",
-      inputSchema: z.object({
+      inputSchema: toolInput({
         query: searchQuery.shape.query.describe(
           "Text to find in titles and notes.",
         ),
@@ -143,8 +177,8 @@ function plannerServer(caller: Caller): McpServer {
   server.registerTool(
     "create_task",
     {
-      description: `Create a task. Pass exactly one of date or listId: date puts it on a day, listId into a list. ${datesNote}`,
-      inputSchema: z.object({
+      description: `Create a task. Pass exactly one of date or listId: date puts it on a day, listId into a list. ${dateFormat}`,
+      inputSchema: toolInput({
         title: title.describe("Task title."),
         date: isoDate.optional().describe("Day to place the task on."),
         listId: listId.optional().describe("List to place the task in."),
@@ -156,8 +190,8 @@ function plannerServer(caller: Caller): McpServer {
   server.registerTool(
     "update_task",
     {
-      description: `Change a task's fields. checklist replaces the whole checklist; completed: false unchecks it; repeat: null stops the series. ${idNote} ${datesNote}`,
-      inputSchema: z.object({
+      description: `Change a task's fields. checklist replaces the whole checklist; completed: false unchecks it; repeat: null stops the series. ${idNote} ${dateFormat}`,
+      inputSchema: toolInput({
         id: taskId.describe("Task id."),
         scope: scope
           .default("this")
@@ -178,8 +212,8 @@ function plannerServer(caller: Caller): McpServer {
   server.registerTool(
     "move_task",
     {
-      description: `Move a task to date or listId, exactly one of them, and optionally to index within that day or list (0 is first). ${datesNote} ${idNote}`,
-      inputSchema: z.object({
+      description: `Move a task to date or listId, exactly one of them, and optionally to index within that day or list (0 is first). ${dateFormat} ${idNote}`,
+      inputSchema: toolInput({
         id: taskId.describe("Task id."),
         date: isoDate.optional().describe("Day to move the task to."),
         listId: listId.optional().describe("List to move the task to."),
@@ -204,7 +238,7 @@ function plannerServer(caller: Caller): McpServer {
     "complete_task",
     {
       description: `Mark a task completed; use update_task with completed: false to undo it. ${idNote}`,
-      inputSchema: z.object({ id: taskId.describe("Task id.") }),
+      inputSchema: toolInput({ id: taskId.describe("Task id.") }),
     },
     async ({ id }) =>
       run(() =>
@@ -216,7 +250,7 @@ function plannerServer(caller: Caller): McpServer {
     "delete_task",
     {
       description: `Delete a task. ${idNote}`,
-      inputSchema: z.object({
+      inputSchema: toolInput({
         id: taskId.describe("Task id."),
         scope: scope
           .default("this")
