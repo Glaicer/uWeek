@@ -15,6 +15,7 @@ import {
   queryTasks,
   readWeek,
   searchTasks,
+  type Task,
   updateTask,
 } from "./planner";
 import {
@@ -48,6 +49,12 @@ function callerOf(authInfo: AuthInfo | undefined): Caller {
   if (typeof userId !== "string" || !(now instanceof Date))
     throw new Error("MCP request without a caller");
   return { userId, now };
+}
+
+async function requireTask(task: Promise<Task | null>): Promise<Task> {
+  const found = await task;
+  if (!found) throw new PlannerNotFoundError();
+  return found;
 }
 
 // why: tool schemas stay flat z.object — Claude rejects a top-level oneOf, so planner unions are parsed inside callbacks
@@ -157,30 +164,14 @@ function plannerServer(caller: Caller): McpServer {
           .describe(
             'Use "following" to apply the change to this and all later occurrences.',
           ),
-        title: edits.shape.title.describe("New title."),
-        completed: edits.shape.completed.describe(
-          "true checks the task, false unchecks it.",
-        ),
-        notes: edits.shape.notes.describe("New notes; replaces the old ones."),
-        color: edits.shape.color.describe("Task color, or null for none."),
-        checklist: edits.shape.checklist.describe(
-          "Replaces the whole checklist.",
-        ),
-        placement: edits.shape.placement.describe(
-          "Move to a day or a list; pass exactly one of date or listId.",
-        ),
-        repeat: edits.shape.repeat.describe(
-          "New repeat rule, or null to stop repeating.",
-        ),
+        ...edits.shape,
       }),
     },
     async (args) => {
       const { id, scope: inScope, ...changes } = args;
-      return run(async () => {
-        const task = await updateTask(caller.userId, id, changes, inScope);
-        if (!task) throw new PlannerNotFoundError();
-        return task;
-      });
+      return run(() =>
+        requireTask(updateTask(caller.userId, id, changes, inScope)),
+      );
     },
   );
 
@@ -201,13 +192,11 @@ function plannerServer(caller: Caller): McpServer {
     },
     async (args) => {
       const { id, ...to } = args;
-      return run(async () => {
-        const task = await updateTask(caller.userId, id, {
-          placement: placement.parse(to),
-        });
-        if (!task) throw new PlannerNotFoundError();
-        return task;
-      });
+      return run(() =>
+        requireTask(
+          updateTask(caller.userId, id, { placement: placement.parse(to) }),
+        ),
+      );
     },
   );
 
@@ -218,11 +207,9 @@ function plannerServer(caller: Caller): McpServer {
       inputSchema: z.object({ id: taskId.describe("Task id.") }),
     },
     async ({ id }) =>
-      run(async () => {
-        const task = await updateTask(caller.userId, id, { completed: true });
-        if (!task) throw new PlannerNotFoundError();
-        return task;
-      }),
+      run(() =>
+        requireTask(updateTask(caller.userId, id, { completed: true })),
+      ),
   );
 
   server.registerTool(
@@ -286,8 +273,7 @@ export async function handleMcpRequest(
   }
   return handler.fetch(request, {
     authInfo: {
-      token:
-        request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "",
+      token: principal.token,
       clientId: principal.tokenId,
       scopes: [],
       extra: { userId: principal.userId, now },

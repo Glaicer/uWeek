@@ -18,9 +18,13 @@ function bearerToken(header: string | null): string | null {
   return match ? match[1] : null;
 }
 
+export interface AuthorizedApiPrincipal extends ApiPrincipal {
+  token: string;
+}
+
 export async function authorizeApiRequest(
   request: Request,
-): Promise<ApiPrincipal> {
+): Promise<AuthorizedApiPrincipal> {
   const token = bearerToken(request.headers.get("authorization"));
   if (token === null) throw new ApiError("unauthorized", "Unauthorized");
   // why: revocation is checked before the budget, so a revoked token is always 401 and never 429
@@ -37,5 +41,5 @@ export async function authorizeApiRequest(
       });
     throw error;
   }
-  return principal;
+  return { ...principal, token };
 }

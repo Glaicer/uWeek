@@ -22,8 +22,12 @@ async function connect(baseURL: string, token?: string): Promise<Client> {
   return client;
 }
 
+function text(result: CallToolResult): string {
+  return (result.content[0] as { text: string }).text;
+}
+
 function json(result: CallToolResult): unknown {
-  return JSON.parse((result.content[0] as { text: string }).text);
+  return JSON.parse(text(result));
 }
 
 test("an agent without a valid token is refused", async ({
@@ -248,9 +252,7 @@ test("tool errors reach the agent as tool results", async ({
       arguments: { id: theirs.id },
     });
     expect(stolen.isError).toBe(true);
-    expect((stolen.content[0] as { text: string }).text).toBe(
-      "Resource not found",
-    );
+    expect(text(stolen)).toBe("Resource not found");
 
     const week = json(
       await otherClient.callTool({
@@ -283,12 +285,13 @@ test("a revoked token stops working at once", async ({ browser, baseURL }) => {
       user.page.getByRole("button", { name: "Revoke Agent" }),
     ).toHaveCount(0);
 
-    await expect(
-      client.callTool({ name: "list_lists", arguments: {} }),
-    ).rejects.toMatchObject({ status: 401 });
-    await expect(connect(baseURL!, user.token)).rejects.toMatchObject({
-      status: 401,
-    });
+    const revoked = client.callTool({ name: "list_lists", arguments: {} });
+    await expect(revoked).rejects.toBeInstanceOf(SdkHttpError);
+    await expect(revoked).rejects.toMatchObject({ status: 401 });
+
+    const rejected = connect(baseURL!, user.token);
+    await expect(rejected).rejects.toBeInstanceOf(SdkHttpError);
+    await expect(rejected).rejects.toMatchObject({ status: 401 });
   } finally {
     await client?.close();
     await user.close();
