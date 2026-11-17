@@ -1,66 +1,93 @@
-import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { Pool } from "pg";
 import { afterAll, expect, test } from "vitest";
+import { testDatabaseUrl } from "../../tests/database";
 import { db } from "./client";
 
 afterAll(() => db.$client.end());
 
-test("removing import metadata preserves existing tasks and lists", async () => {
-  const migration = await readFile(
-    "drizzle/0007_remove_tweek_import.sql",
-    "utf8",
+test("migration history contains no removed import artifacts", async () => {
+  for (const file of await readdir("drizzle", { recursive: true })) {
+    expect(file).not.toMatch(/tweek/i);
+    if (!/\.(sql|json)$/.test(file)) continue;
+    expect(await readFile(`drizzle/${file}`, "utf8")).not.toMatch(
+      /tweek|import_history|provenance/i,
+    );
+  }
+});
+
+test("migration journal and snapshots form a continuous chain", async () => {
+  const journal = JSON.parse(
+    await readFile("drizzle/meta/_journal.json", "utf8"),
   );
-  const client = await db.$client.connect();
+  let prevId = "00000000-0000-0000-0000-000000000000";
+  for (const [index, entry] of journal.entries.entries()) {
+    expect(entry.idx).toBe(index);
+    expect(entry.tag).toMatch(
+      new RegExp(`^${String(index).padStart(4, "0")}_`),
+    );
+    await readFile(`drizzle/${entry.tag}.sql`, "utf8");
+    const snapshot = JSON.parse(
+      await readFile(
+        `drizzle/meta/${String(index).padStart(4, "0")}_snapshot.json`,
+        "utf8",
+      ),
+    );
+    expect(snapshot.prevId).toBe(prevId);
+    prevId = snapshot.id;
+  }
+  expect(journal.entries[6]).toMatchObject({
+    tag: "0006_api_tokens",
+    when: 1794844324973,
+  });
+});
+
+test("fresh migrations match the existing schema and can run again", async () => {
+  const name = `migration_test_${randomUUID().replaceAll("-", "")}`;
+  const url = new URL(testDatabaseUrl);
+  url.pathname = `/${name}`;
+  const pool = new Pool({ connectionString: url.toString() });
+  await db.$client.query(`CREATE DATABASE "${name}"`);
   try {
-    await client.query("BEGIN");
-    await client.query(`
-      CREATE TEMP TABLE lists (LIKE public.lists INCLUDING ALL);
-      CREATE TEMP TABLE tasks (LIKE public.tasks INCLUDING ALL);
-      ALTER TABLE pg_temp.tasks ADD COLUMN IF NOT EXISTS provenance jsonb;
-      CREATE TEMP TABLE import_history (fingerprint text);
-      INSERT INTO pg_temp.lists (id, user_id, title, position)
-        VALUES ('list', 'owner', 'Books', 0);
-      INSERT INTO pg_temp.tasks
-        (id, user_id, title, date, list_id, position, notes, completed_at, provenance)
-        VALUES
-          ('dated', 'owner', 'Dated task', '2026-11-16', NULL, 0, 'Keep notes', '2026-11-16T10:00:00Z', '{"recordNumber": 2}'),
-          ('undated', 'owner', 'List task', NULL, 'list', 0, '', NULL, '{"recordNumber": 3}');
-      INSERT INTO pg_temp.import_history VALUES ('fingerprint');
-    `);
-    const beforeTasks = await client.query(
-      "SELECT to_jsonb(tasks) - 'provenance' AS task FROM pg_temp.tasks ORDER BY id",
-    );
-    const beforeLists = await client.query("SELECT * FROM pg_temp.lists");
+    const freshDb = drizzle({ client: pool });
+    await migrate(freshDb, { migrationsFolder: "drizzle" });
 
-    await client.query(migration);
-
-    expect(
-      (
-        await client.query(
-          "SELECT to_regclass('pg_temp.import_history') AS name",
-        )
-      ).rows,
-    ).toEqual([{ name: null }]);
-    expect(
-      (
-        await client.query(`
-          SELECT attname FROM pg_attribute
-          WHERE attrelid = 'pg_temp.tasks'::regclass
-            AND attname = 'provenance' AND NOT attisdropped
-        `)
-      ).rows,
-    ).toEqual([]);
-    expect(
-      (
-        await client.query(
-          "SELECT to_jsonb(tasks) AS task FROM pg_temp.tasks ORDER BY id",
-        )
-      ).rows,
-    ).toEqual(beforeTasks.rows);
-    expect((await client.query("SELECT * FROM pg_temp.lists")).rows).toEqual(
-      beforeLists.rows,
+    const schemaQuery = `
+      SELECT 'column' AS kind, c.relname AS table_name, a.attname AS name,
+        format_type(a.atttypid, a.atttypmod) AS definition,
+        a.attnotnull AS not_null, pg_get_expr(d.adbin, d.adrelid) AS default_value
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_attribute a ON a.attrelid = c.oid
+      LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+      WHERE n.nspname = 'public' AND c.relkind = 'r'
+        AND a.attnum > 0 AND NOT a.attisdropped
+      UNION ALL
+      SELECT 'constraint', c.relname, con.conname,
+        pg_get_constraintdef(con.oid), NULL, NULL
+      FROM pg_constraint con
+      JOIN pg_class c ON c.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+      UNION ALL
+      SELECT 'index', tablename, indexname, indexdef, NULL, NULL
+      FROM pg_indexes WHERE schemaname = 'public'
+      ORDER BY kind, table_name, name
+    `;
+    expect((await pool.query(schemaQuery)).rows).toEqual(
+      (await db.$client.query(schemaQuery)).rows,
     );
+
+    const historyQuery =
+      "SELECT * FROM drizzle.__drizzle_migrations ORDER BY created_at";
+    const before = (await pool.query(historyQuery)).rows;
+    await migrate(freshDb, { migrationsFolder: "drizzle" });
+    expect((await pool.query(historyQuery)).rows).toEqual(before);
   } finally {
-    await client.query("ROLLBACK");
-    client.release();
+    await pool.end();
+    await db.$client.query(`DROP DATABASE "${name}"`);
   }
 });
