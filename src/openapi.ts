@@ -72,10 +72,10 @@ export function createOpenApiDocument(): ReturnType<typeof createDocument> {
   return createDocument({
     openapi: "3.1.0",
     info: {
-      title: "YourWeek API",
+      title: "uWeek API",
       version: "1.0.0",
       description: [
-        "Tasks, lists and their occurrences for one YourWeek account.",
+        "Tasks, lists and their occurrences for one uWeek account.",
         'Authenticate every protected request with `Authorization: Bearer <token>`. API tokens are managed on the "API tokens" settings page and can be revoked at any time.',
         "Calendar dates are `YYYY-MM-DD` in the token owner's time zone. A date range is inclusive and may span at most 366 days. Repeating tasks appear as virtual occurrences with an id of the form `<seriesId>_<date>`.",
         "Each token may make 120 requests per minute. A limited response is `429` with the number of seconds in the `Retry-After` header.",

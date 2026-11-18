@@ -13,7 +13,7 @@ export default async function ApiTokensPage(): Promise<React.JSX.Element> {
   const agentConfig = JSON.stringify(
     {
       mcpServers: {
-        yourweek: {
+        uweek: {
           type: "http",
           url: new URL("/mcp", process.env.BETTER_AUTH_URL).href,
           headers: { Authorization: "Bearer YOUR_API_TOKEN" },

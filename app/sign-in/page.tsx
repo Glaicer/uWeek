@@ -12,7 +12,7 @@ export default async function SignInPage({
   const { error, provider } = await searchParams;
   return (
     <main className={styles.page}>
-      <h1 className={styles.title}>YourWeek</h1>
+      <h1 className={styles.title}>uWeek</h1>
       <p className={styles.lead}>Sign in with a link sent to your email.</p>
       {error && (
         <p className={styles.error} role="alert">

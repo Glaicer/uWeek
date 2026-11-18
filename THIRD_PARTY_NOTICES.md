@@ -1,6 +1,6 @@
 # Third-party notices
 
-YourWeek source is MIT licensed. Versions below are pinned in `package.json` and `pnpm-lock.yaml`; the app is delivered by Next.js (`pnpm build`, `pnpm start`), which ships `next`, `react` and `react-dom` browser code alongside the application.
+uWeek source is MIT licensed. Versions below are pinned in `package.json` and `pnpm-lock.yaml`; the app is delivered by Next.js (`pnpm build`, `pnpm start`), which ships `next`, `react` and `react-dom` browser code alongside the application.
 
 ## Distributed framework dependencies (Next.js delivery)
 
@@ -30,6 +30,6 @@ Their MIT texts follow the same terms as the application's `LICENSE` (copyright 
 | typescript                | 6.0.3   | Apache-2.0 |
 | typescript-eslint         | 8.71.0  | MIT        |
 
-Audit source: installed locked packages' `package.json` license declarations, 2026-10-06. The Linux dependency tree declares MIT, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0, BlueOak-1.0.0, and MPL-2.0. These permit use alongside MIT application code; they are not relicensed by YourWeek. MPL-2.0 applies to unmodified build-only `lightningcss` and its native binary, not to YourWeek source. Build/test tools and downloaded Playwright browsers are not distributed in `dist/`; redistribution of those tools/binaries must retain their own license and notice requirements. Optional binaries for other operating systems were not installed or audited here.
+Audit source: installed locked packages' `package.json` license declarations, 2026-10-06. The Linux dependency tree declares MIT, ISC, BSD-2-Clause, BSD-3-Clause, Apache-2.0, BlueOak-1.0.0, and MPL-2.0. These permit use alongside MIT application code; they are not relicensed by uWeek. MPL-2.0 applies to unmodified build-only `lightningcss` and its native binary, not to uWeek source. Build/test tools and downloaded Playwright browsers are not distributed in `dist/`; redistribution of those tools/binaries must retain their own license and notice requirements. Optional binaries for other operating systems were not installed or audited here.
 
 No Tweek source, logo, screenshot fragments, or fonts are distributed. Reference screenshots are not covered by the application's MIT grant.

@@ -42,7 +42,7 @@ test("search opens from the header, finds a future task and highlights it on its
     dialog.getByRole("link", { name: "Orchid care", exact: true }),
   ).toBeVisible();
   await page.screenshot({
-    path: ".scratch/yourweek-cloud/issues/09-screenshots/search-1440.png",
+    path: ".scratch/uweek-cloud/issues/09-screenshots/search-1440.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 360, height: 800 });
@@ -50,7 +50,7 @@ test("search opens from the header, finds a future task and highlights it on its
     360,
   );
   await page.screenshot({
-    path: ".scratch/yourweek-cloud/issues/09-screenshots/search-360.png",
+    path: ".scratch/uweek-cloud/issues/09-screenshots/search-360.png",
     fullPage: true,
   });
   await dialog.getByRole("link", { name: "Orchid care", exact: true }).click();
@@ -63,7 +63,7 @@ test("search opens from the header, finds a future task and highlights it on its
   await expect(found).toBeFocused();
   await expect(found).toBeInViewport();
   await page.screenshot({
-    path: ".scratch/yourweek-cloud/issues/09-screenshots/highlight-360.png",
+    path: ".scratch/uweek-cloud/issues/09-screenshots/highlight-360.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -84,7 +84,7 @@ test("search opens from the header, finds a future task and highlights it on its
   await expect(edit).toHaveCSS("opacity", "0");
   await expect(remove).toHaveCSS("opacity", "0");
   await page.screenshot({
-    path: ".scratch/yourweek-cloud/issues/09-screenshots/highlight-1440.png",
+    path: ".scratch/uweek-cloud/issues/09-screenshots/highlight-1440.png",
     fullPage: true,
   });
 });

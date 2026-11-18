@@ -48,8 +48,8 @@ export function sendSignInLink(
   const notice = `The link works once and expires in ${minutes} minutes. If you did not ask for it, ignore this email.`;
   return send({
     to: email,
-    subject: "Sign in to YourWeek",
-    text: `Open this link to sign in to YourWeek:\n\n${url}\n\n${notice}`,
-    html: `<p>Open this link to sign in to YourWeek:</p><p><a href="${escapeHtml(url)}">Sign in</a></p><p>${notice}</p>`,
+    subject: "Sign in to uWeek",
+    text: `Open this link to sign in to uWeek:\n\n${url}\n\n${notice}`,
+    html: `<p>Open this link to sign in to uWeek:</p><p><a href="${escapeHtml(url)}">Sign in</a></p><p>${notice}</p>`,
   });
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
-export const metadata: Metadata = { title: "YourWeek" };
+export const metadata: Metadata = { title: "uWeek" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

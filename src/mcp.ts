@@ -44,7 +44,7 @@ const datesNote =
 const dateFormat =
   'Dates are YYYY-MM-DD; "today" is in the user\'s time zone, as list_week reports.';
 
-const serverInstructions = `YourWeek is the user's weekly planner: tasks placed on days of the week or kept in lists. Use these tools to read the week, tasks and lists, search tasks, and create, update, move, complete or delete tasks. ${datesNote}`;
+const serverInstructions = `uWeek is the user's weekly planner: tasks placed on days of the week or kept in lists. Use these tools to read the week, tasks and lists, search tasks, and create, update, move, complete or delete tasks. ${datesNote}`;
 
 const idNote =
   'Task ids come from list_week or list_tasks. An occurrence of a repeating task has an id like <uuid>_<YYYY-MM-DD>; scope "following" covers this occurrence and all later ones.';
@@ -94,7 +94,7 @@ async function requireTask(task: Promise<Task | null>): Promise<Task> {
 // why: tool schemas stay flat z.object — Claude rejects a top-level oneOf, so planner unions are parsed inside callbacks
 function plannerServer(caller: Caller): McpServer {
   const server = new McpServer(
-    { name: "yourweek", version: "1.0.0" },
+    { name: "uweek", version: "1.0.0" },
     { instructions: serverInstructions },
   );
 

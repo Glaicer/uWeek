@@ -3,11 +3,11 @@ import { ApiError } from "./api-errors";
 import { authenticateApiToken, type ApiPrincipal } from "./api-tokens";
 
 const globalForLimiter = globalThis as typeof globalThis & {
-  yourweekApiLimiter?: RateLimiterMemory;
+  uweekApiLimiter?: RateLimiterMemory;
 };
 
 // why: dev hot reload re-evaluates modules; one budget must cover every protected route
-const limiter = (globalForLimiter.yourweekApiLimiter ??= new RateLimiterMemory({
+const limiter = (globalForLimiter.uweekApiLimiter ??= new RateLimiterMemory({
   points: 120,
   duration: 60,
 }));

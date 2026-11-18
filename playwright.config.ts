@@ -11,7 +11,7 @@ const env = {
   DATABASE_URL: testDatabaseUrl,
   BETTER_AUTH_SECRET: "playwright-only-secret-not-for-production-use",
   BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
-  MAIL_FROM: "YourWeek <login@example.com>",
+  MAIL_FROM: "uWeek <login@example.com>",
   MAIL_OUTBOX_DIR: outbox,
   TEST_CLOCK_COOKIE: testClockCookie,
   GOOGLE_CLIENT_ID: googleClientId,

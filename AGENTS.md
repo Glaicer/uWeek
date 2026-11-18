@@ -16,7 +16,7 @@ Single-context: root `GLOSSARY.md` and `docs/adr/`. Before exploring domain conc
 
 ### Default tech stack
 
-Before choosing a library or tool for a task, read `docs/tech-stack.md`: accepted defaults (zustand 5.0.15, zod 4.6.7), the approved `yourweek-cloud` stack (drizzle + pg, better-auth, resend, MCP server v2, zod-openapi, rate-limiter-flexible, vitest) with the ticket that installs each package, the explicit "not adopted" list with reasons, and the rules for adding any new dependency (resolve the current stable from the registry, pin the exact version, respect the spec's "no dependency unless used now" constraint). New dependencies are installed only with the owner's approval.
+Before choosing a library or tool for a task, read `docs/tech-stack.md`: accepted defaults (zustand 5.0.15, zod 4.6.7), the approved `uweek-cloud` stack (drizzle + pg, better-auth, resend, MCP server v2, zod-openapi, rate-limiter-flexible, vitest) with the ticket that installs each package, the explicit "not adopted" list with reasons, and the rules for adding any new dependency (resolve the current stable from the registry, pin the exact version, respect the spec's "no dependency unless used now" constraint). New dependencies are installed only with the owner's approval.
 
 ### Icons
 

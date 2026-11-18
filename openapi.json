@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "YourWeek API",
+    "title": "uWeek API",
     "version": "1.0.0",
-    "description": "Tasks, lists and their occurrences for one YourWeek account.\n\nAuthenticate every protected request with `Authorization: Bearer <token>`. API tokens are managed on the \"API tokens\" settings page and can be revoked at any time.\n\nCalendar dates are `YYYY-MM-DD` in the token owner's time zone. A date range is inclusive and may span at most 366 days. Repeating tasks appear as virtual occurrences with an id of the form `<seriesId>_<date>`.\n\nEach token may make 120 requests per minute. A limited response is `429` with the number of seconds in the `Retry-After` header.\n\nErrors share one shape: `{ error: { code, message } }`."
+    "description": "Tasks, lists and their occurrences for one uWeek account.\n\nAuthenticate every protected request with `Authorization: Bearer <token>`. API tokens are managed on the \"API tokens\" settings page and can be revoked at any time.\n\nCalendar dates are `YYYY-MM-DD` in the token owner's time zone. A date range is inclusive and may span at most 366 days. Repeating tasks appear as virtual occurrences with an id of the form `<seriesId>_<date>`.\n\nEach token may make 120 requests per minute. A limited response is `429` with the number of seconds in the `Retry-After` header.\n\nErrors share one shape: `{ error: { code, message } }`."
   },
   "servers": [
     {

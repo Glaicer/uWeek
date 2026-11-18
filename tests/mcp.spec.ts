@@ -17,7 +17,7 @@ async function connect(baseURL: string, token?: string): Promise<Client> {
     new URL("/mcp", baseURL),
     { requestInit: { headers } },
   );
-  const client = new Client({ name: "yourweek-e2e", version: "1.0.0" });
+  const client = new Client({ name: "uweek-e2e", version: "1.0.0" });
   await client.connect(transport);
   return client;
 }

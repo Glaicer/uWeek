@@ -4,7 +4,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 const globalForMigrations = globalThis as typeof globalThis & {
-  yourweekMigrationWatcher?: boolean;
+  uweekMigrationWatcher?: boolean;
 };
 
 const migrate = () => run(process.execPath, ["src/db/migrate.ts"]);
@@ -12,8 +12,8 @@ const migrate = () => run(process.execPath, ["src/db/migrate.ts"]);
 // why: a long-running pnpm dev must apply migrations generated while it runs, or queries hit missing columns
 export async function migrateNowAndOnChange(): Promise<void> {
   await migrate();
-  if (globalForMigrations.yourweekMigrationWatcher) return;
-  globalForMigrations.yourweekMigrationWatcher = true;
+  if (globalForMigrations.uweekMigrationWatcher) return;
+  globalForMigrations.uweekMigrationWatcher = true;
 
   let queue = Promise.resolve();
   let timer: NodeJS.Timeout | undefined;

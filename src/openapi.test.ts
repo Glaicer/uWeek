@@ -27,7 +27,7 @@ test("OpenAPI is generated from the shared planner schemas", () => {
 
   expect(document.openapi).toBe("3.1.0");
   expect(document.info).toMatchObject({
-    title: "YourWeek API",
+    title: "uWeek API",
     version: "1.0.0",
   });
   expect(document.servers).toEqual([{ url: "/api/v1" }]);

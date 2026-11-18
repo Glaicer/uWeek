@@ -2,10 +2,10 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
 
-const globalForDb = globalThis as typeof globalThis & { yourweekPool?: Pool };
+const globalForDb = globalThis as typeof globalThis & { uweekPool?: Pool };
 
 // why: dev hot reload re-evaluates modules; reuse one pool instead of leaking connections
-const pool = (globalForDb.yourweekPool ??= new Pool({
+const pool = (globalForDb.uweekPool ??= new Pool({
   connectionString: process.env.DATABASE_URL,
 }));
 
