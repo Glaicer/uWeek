@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues and specs live as local Markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues and specs live as local Markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`. `.scratch/` is local-only and stays out of git: never `git add -f` it, even to commit a ticket's status change.
 
 ### Triage labels
 
