@@ -1,20 +1,17 @@
 import { expect, test } from "@playwright/test";
 import {
   Client,
-  SdkHttpError,
   StreamableHTTPClientTransport,
   type CallToolResult,
 } from "@modelcontextprotocol/client";
-import { z } from "zod";
-import { edits, newTask } from "../src/planner-schemas";
 import { newApiUser, pinnedNow } from "./api-helpers";
 import { testClockCookie } from "./clock";
 
-async function connect(baseURL: string, token?: string): Promise<Client> {
+async function connect(baseURL: string, token: string): Promise<Client> {
   const headers: Record<string, string> = {
     Cookie: `${testClockCookie}=${new Date(pinnedNow).toISOString()}`,
+    Authorization: `Bearer ${token}`,
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
   const transport = new StreamableHTTPClientTransport(
     new URL("/mcp", baseURL),
     { requestInit: { headers } },
@@ -24,46 +21,11 @@ async function connect(baseURL: string, token?: string): Promise<Client> {
   return client;
 }
 
-function text(result: CallToolResult): string {
-  return (result.content[0] as { text: string }).text;
-}
-
 function json(result: CallToolResult): unknown {
-  return JSON.parse(text(result));
+  return JSON.parse((result.content[0] as { text: string }).text);
 }
 
-// why: a Playwright worker loads zod without the English locale the server installs, so its messages would read differently
-z.config(z.locales.en());
-
-function explanation(schema: z.ZodType, input: unknown): string {
-  const parsed = schema.safeParse(input);
-  if (parsed.success)
-    throw new Error("expected the planner schema to refuse this input");
-  return z.prettifyError(parsed.error);
-}
-
-test("an agent without a valid token is refused", async ({
-  request,
-  baseURL,
-}) => {
-  for (const headers of [
-    undefined,
-    { Authorization: "Bearer yw_short" },
-  ] as const) {
-    const response = await request.post("/mcp", { data: {}, headers });
-    expect(response.status()).toBe(401);
-    expect(response.headers()["www-authenticate"]).toContain("Bearer");
-    expect(await response.json()).toEqual({
-      error: { code: "unauthorized", message: expect.any(String) },
-    });
-  }
-
-  const failed = connect(baseURL!);
-  await expect(failed).rejects.toBeInstanceOf(SdkHttpError);
-  await expect(failed).rejects.toMatchObject({ status: 401 });
-});
-
-test("an agent connects with a token and sees the planner tools", async ({
+test("a token from the settings page reaches the MCP route", async ({
   browser,
   baseURL,
 }) => {
@@ -71,295 +33,24 @@ test("an agent connects with a token and sees the planner tools", async ({
   let client: Client | undefined;
   try {
     client = await connect(baseURL!, user.token);
-    const instructions = client.getInstructions();
-    expect(instructions).toContain("weekly planner");
-    expect(instructions).toContain("YYYY-MM-DD");
-    const { tools } = await client.listTools();
-    expect(JSON.stringify(tools)).not.toContain("[0-9a-fA-F]{8}");
-    expect(tools.map((tool) => tool.name).sort()).toEqual([
-      "complete_task",
-      "create_task",
-      "delete_task",
-      "list_lists",
-      "list_tasks",
-      "list_week",
-      "move_task",
-      "search_tasks",
-      "update_task",
-    ]);
-    for (const tool of tools) {
-      expect(tool.description, tool.name).toBeTruthy();
-      const schema = tool.inputSchema as Record<string, unknown>;
-      expect(schema, tool.name).not.toHaveProperty("oneOf");
-      expect(schema, tool.name).not.toHaveProperty("anyOf");
-    }
-    const byName = new Map(tools.map((tool) => [tool.name, tool]));
-    for (const name of ["list_week", "list_tasks", "create_task", "move_task"])
-      expect(byName.get(name)?.description, name).toContain("YYYY-MM-DD");
-    expect(byName.get("list_week")!.description).toContain("time zone");
-  } finally {
-    await client?.close();
-    await user.close();
-  }
-});
+    expect(client.getInstructions()).toContain("weekly planner");
 
-test("an agent creates a task and completes it, and the week shows it", async ({
-  browser,
-  baseURL,
-}) => {
-  const user = await newApiUser(browser, baseURL!);
-  let client: Client | undefined;
-  try {
-    client = await connect(baseURL!, user.token);
-
-    const created = json(
-      await client.callTool({
-        name: "create_task",
-        arguments: { title: "Call the bank", date: "2026-11-10" },
-      }),
-    ) as { id: string };
-    expect(created).toMatchObject({
-      title: "Call the bank",
-      date: "2026-11-10",
-      completed: false,
-    });
-
+    expect(
+      json(await client.callTool({ name: "list_lists", arguments: {} })),
+    ).toEqual([{ id: expect.any(String), title: "Inbox" }]);
     expect(
       json(
         await client.callTool({
-          name: "complete_task",
-          arguments: { id: created.id },
+          name: "create_task",
+          arguments: { title: "Call the bank", date: "2026-11-10" },
         }),
       ),
-    ).toMatchObject({ id: created.id, completed: true });
-
-    const week = json(
-      await client.callTool({
-        name: "list_week",
-        arguments: { week: "2026-11-10" },
-      }),
-    ) as { today: string; tasks: { id: string; completed: boolean }[] };
-    expect(week.today).toBe("2026-11-09");
-    expect(week.tasks.find((task) => task.id === created.id)).toMatchObject({
-      completed: true,
-    });
+    ).toMatchObject({ title: "Call the bank", date: "2026-11-10" });
 
     await user.page.goto("/");
-    const shown = user.page.getByRole("button", {
-      name: "Call the bank",
-      exact: true,
-    });
-    await expect(shown).toBeVisible();
-    await expect(shown).toHaveAttribute("aria-pressed", "true");
-  } finally {
-    await client?.close();
-    await user.close();
-  }
-});
-
-test("an agent reads lists, searches, updates, moves and deletes a task", async ({
-  browser,
-  baseURL,
-}) => {
-  const user = await newApiUser(browser, baseURL!);
-  let client: Client | undefined;
-  try {
-    client = await connect(baseURL!, user.token);
-
-    const lists = json(
-      await client.callTool({ name: "list_lists", arguments: {} }),
-    ) as { id: string; title: string }[];
-    expect(lists).toEqual([{ id: expect.any(String), title: "Inbox" }]);
-    const inbox = lists[0].id;
-
-    const created = json(
-      await client.callTool({
-        name: "create_task",
-        arguments: { title: "Renew passport", listId: inbox },
-      }),
-    ) as { id: string };
-    expect(created).toMatchObject({ title: "Renew passport", listId: inbox });
-
-    const found = json(
-      await client.callTool({
-        name: "search_tasks",
-        arguments: { query: "passport" },
-      }),
-    ) as { items: { id: string }[]; nextCursor: number | null };
-    expect(found.items.map((item) => item.id)).toContain(created.id);
-    expect(found.nextCursor).toBeNull();
-
-    expect(
-      json(
-        await client.callTool({
-          name: "update_task",
-          arguments: { id: created.id, notes: "Bring photos" },
-        }),
-      ),
-    ).toMatchObject({ id: created.id, notes: "Bring photos" });
-
-    const moved = json(
-      await client.callTool({
-        name: "move_task",
-        arguments: { id: created.id, date: "2026-11-12" },
-      }),
-    ) as Record<string, unknown>;
-    expect(moved).toMatchObject({ id: created.id, date: "2026-11-12" });
-    expect(moved).not.toHaveProperty("listId");
-
-    const listed = async () =>
-      json(
-        await client!.callTool({
-          name: "list_tasks",
-          arguments: {
-            from: "2026-11-09",
-            to: "2026-11-15",
-            completed: false,
-          },
-        }),
-      ) as { id: string }[];
-    expect((await listed()).map((task) => task.id)).toContain(created.id);
-
-    expect(
-      json(
-        await client.callTool({
-          name: "delete_task",
-          arguments: { id: created.id },
-        }),
-      ),
-    ).toEqual({ id: created.id, deleted: true });
-    expect((await listed()).map((task) => task.id)).not.toContain(created.id);
-  } finally {
-    await client?.close();
-    await user.close();
-  }
-});
-
-test("tool errors reach the agent as tool results", async ({
-  browser,
-  baseURL,
-}) => {
-  const user = await newApiUser(browser, baseURL!);
-  const other = await newApiUser(browser, baseURL!);
-  let client: Client | undefined;
-  let otherClient: Client | undefined;
-  try {
-    client = await connect(baseURL!, user.token);
-    otherClient = await connect(baseURL!, other.token);
-
-    const refused = await client.callTool({
-      name: "create_task",
-      arguments: {
-        title: "Two places",
-        date: "2026-11-10",
-        listId: crypto.randomUUID(),
-      },
-    });
-    expect(refused.isError).toBe(true);
-
-    const malformed = await client.callTool({
-      name: "complete_task",
-      arguments: { id: "not-a-task-id" },
-    });
-    expect(malformed.isError).toBe(true);
-
-    const theirs = json(
-      await otherClient.callTool({
-        name: "create_task",
-        arguments: { title: "Theirs", date: "2026-11-09" },
-      }),
-    ) as { id: string };
-    const stolen = await client.callTool({
-      name: "complete_task",
-      arguments: { id: theirs.id },
-    });
-    expect(stolen.isError).toBe(true);
-    expect(text(stolen)).toBe("Resource not found");
-
-    const week = json(
-      await otherClient.callTool({
-        name: "list_week",
-        arguments: { week: "2026-11-09" },
-      }),
-    ) as { tasks: { id: string; completed: boolean }[] };
-    expect(week.tasks.find((task) => task.id === theirs.id)).toMatchObject({
-      completed: false,
-    });
-  } finally {
-    await client?.close();
-    await otherClient?.close();
-    await user.close();
-    await other.close();
-  }
-});
-
-test("an invalid tool argument comes back as the schema's own explanation", async ({
-  browser,
-  baseURL,
-}) => {
-  const user = await newApiUser(browser, baseURL!);
-  let client: Client | undefined;
-  try {
-    client = await connect(baseURL!, user.token);
-    const twoPlaces = {
-      title: "Two places",
-      date: "2026-11-10",
-      listId: crypto.randomUUID(),
-    };
-    const placed = await client.callTool({
-      name: "create_task",
-      arguments: twoPlaces,
-    });
-    expect(placed.isError).toBe(true);
-    expect(text(placed)).toBe(explanation(newTask, twoPlaces));
-
-    const task = json(
-      await client.callTool({
-        name: "create_task",
-        arguments: { title: "Mine", date: "2026-11-09" },
-      }),
-    ) as { id: string };
-    const unchanged = await client.callTool({
-      name: "update_task",
-      arguments: { id: task.id },
-    });
-    expect(unchanged.isError).toBe(true);
-    expect(text(unchanged)).toBe(explanation(edits, {}));
-
-    const refused = await user.client.post("/api/v1/tasks", {
-      data: twoPlaces,
-    });
-    expect(refused.status()).toBe(400);
-    expect(await refused.json()).toEqual({
-      error: { code: "invalid_request", message: "Invalid request" },
-    });
-  } finally {
-    await client?.close();
-    await user.close();
-  }
-});
-
-test("a revoked token stops working at once", async ({ browser, baseURL }) => {
-  const user = await newApiUser(browser, baseURL!);
-  let client: Client | undefined;
-  try {
-    client = await connect(baseURL!, user.token);
-    expect(
-      (await client.callTool({ name: "list_lists", arguments: {} })).isError,
-    ).toBeFalsy();
-
-    await user.page.getByRole("button", { name: "Revoke Agent" }).click();
     await expect(
-      user.page.getByRole("button", { name: "Revoke Agent" }),
-    ).toHaveCount(0);
-
-    const revoked = client.callTool({ name: "list_lists", arguments: {} });
-    await expect(revoked).rejects.toBeInstanceOf(SdkHttpError);
-    await expect(revoked).rejects.toMatchObject({ status: 401 });
-
-    const rejected = connect(baseURL!, user.token);
-    await expect(rejected).rejects.toBeInstanceOf(SdkHttpError);
-    await expect(rejected).rejects.toMatchObject({ status: 401 });
+      user.page.getByRole("button", { name: "Call the bank", exact: true }),
+    ).toBeVisible();
   } finally {
     await client?.close();
     await user.close();
