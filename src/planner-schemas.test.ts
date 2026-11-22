@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { repeat, taskQuery, taskResult } from "./planner-schemas";
-import type { Task } from "./planner";
 
 test("planner schemas preserve weekly normalization and serialize planner results", () => {
   expect(
@@ -19,7 +18,7 @@ test("planner schemas preserve weekly normalization and serialize planner result
   });
 
   const seriesId = crypto.randomUUID();
-  const dated: Task = {
+  const dated = {
     id: crypto.randomUUID(),
     title: "Buy milk",
     completed: false,
@@ -30,7 +29,7 @@ test("planner schemas preserve weekly normalization and serialize planner result
     ],
     date: "2026-11-09",
   };
-  const listed: Task = {
+  const listed = {
     id: crypto.randomUUID(),
     title: "Someday",
     completed: true,
@@ -39,7 +38,7 @@ test("planner schemas preserve weekly normalization and serialize planner result
     checklist: [],
     listId: crypto.randomUUID(),
   };
-  const recurring: Task = {
+  const recurring = {
     id: `${seriesId}_2026-11-10`,
     title: "Water plants",
     completed: false,

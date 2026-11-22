@@ -110,6 +110,42 @@ test("a user drags tasks within a day, between days and through a list, and find
   }
 });
 
+test("a task dragged into a list stays there when a series edit reloads the week", async ({
+  page,
+}) => {
+  const today = region(page, "14 Today");
+  const sunday = region(page, "15 Sun");
+  const someday = region(page, "Someday");
+  await addTasks(sunday, ["Gym"]);
+  await addTasks(today, ["Stretch"]);
+
+  await drag(
+    page,
+    task(sunday, "Gym"),
+    someday.getByRole("button", { name: "Add task" }),
+    "top",
+  );
+  await expect(titles(someday)).toHaveText(["Gym"]);
+
+  // why: a series edit reloads the week in place, without a page load
+  await today.getByRole("button", { name: "Edit Stretch" }).click();
+  const details = page.getByRole("dialog", { name: "Stretch" });
+  await details.getByRole("combobox", { name: "Repeat", exact: true }).click();
+  await page.getByRole("option", { name: "Daily", exact: true }).click();
+  await details.getByRole("button", { name: "Done" }).click();
+  await expect(details).toHaveCount(0);
+  await expect(
+    sunday.getByRole("button", { name: "Stretch", exact: true }),
+  ).toBeVisible();
+
+  await expect(titles(someday)).toHaveText(["Gym"]);
+  await someday.getByRole("button", { name: "Edit Gym", exact: true }).click();
+  const card = page.getByRole("dialog", { name: "Gym" });
+  await expect(card.getByRole("combobox", { name: "Move to" })).toHaveText(
+    "Inbox",
+  );
+});
+
 test("while dragging, a user flips a week each time the dragged card enters the edge strip, and drops the task in a later week", async ({
   page,
 }) => {
