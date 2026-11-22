@@ -468,7 +468,7 @@ function TaskRow({
   const detailed = task.notes !== "" || task.checklist.length > 0;
   const missed =
     task.recurrence &&
-    task.date !== undefined &&
+    "date" in task &&
     task.recurrence.occurrence !== task.date
       ? `from ${dayMonth.format(localDate(task.recurrence.occurrence))}`
       : undefined;
@@ -1453,8 +1453,7 @@ function TaskCard({
     notes: task.notes,
     color: task.color,
     checklist: task.checklist,
-    placement:
-      task.date !== undefined ? { date: task.date } : { listId: task.listId },
+    placement: "date" in task ? { date: task.date } : { listId: task.listId },
     repeat: task.recurrence?.repeat ?? null,
   }));
   const [newItem, setNewItem] = useState("");
@@ -1600,7 +1599,7 @@ function TaskCard({
                 set({
                   placement:
                     next === "date"
-                      ? { date: task.date ?? today }
+                      ? { date: "date" in task ? task.date : today }
                       : { listId: next },
                 })
               }
@@ -1783,8 +1782,10 @@ export function Week({
   const [lists, setLists] = useState(initialLists);
   const [focus, setFocus] = useState({ id: focusId, visit: 0 });
   const [rememberedId, rememberId] = useContext(SelectedList);
+  const focused = initialTasks.find((task) => task.id === focusId);
   const [selectedId, setSelectedId] = useState(
-    initialTasks.find((task) => task.id === focusId)?.listId ?? rememberedId,
+    (focused && "listId" in focused ? focused.listId : undefined) ??
+      rememberedId,
   );
   const selected = lists.find((list) => list.id === selectedId) ?? lists[0];
   useEffect(() => rememberId(selected.id), [rememberId, selected.id]);
@@ -1832,7 +1833,7 @@ export function Week({
   async function reload() {
     const fresh = await listTasks(dates[0], dates[6]);
     setTasks((tasks) => [
-      ...tasks.filter((task) => task.date === undefined),
+      ...tasks.filter((task) => !("date" in task)),
       ...fresh,
     ]);
   }
@@ -1926,7 +1927,9 @@ export function Week({
   function deleted(list: TaskList) {
     const rest = lists.filter((l) => l !== list);
     setLists(rest);
-    setTasks((tasks) => tasks.filter((task) => task.listId !== list.id));
+    setTasks((tasks) =>
+      tasks.filter((task) => !("listId" in task) || task.listId !== list.id),
+    );
     if (list === selected)
       setSelectedId(rest[Math.max(lists.indexOf(list) - 1, 0)].id);
   }
@@ -1966,7 +1969,7 @@ export function Week({
                 (task) => task.id === id || task.recurrence?.seriesId === id,
               );
               if (!target) return;
-              if (target.listId) setSelectedId(target.listId);
+              if ("listId" in target) setSelectedId(target.listId);
               setFocus((focus) => ({ id: target.id, visit: focus.visit + 1 }));
             }}
           />
@@ -2033,7 +2036,9 @@ export function Week({
               lists={lists}
               selected={selected}
               countOf={(list) =>
-                tasks.filter((task) => task.listId === list.id).length +
+                tasks.filter(
+                  (task) => "listId" in task && task.listId === list.id,
+                ).length +
                 drafts.filter((draft) => draft.placement.listId === list.id)
                   .length
               }

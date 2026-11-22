@@ -147,9 +147,8 @@ test("a result opens its current week after rollover or its list, and a foreign 
   const moved = await readWeek(user, { focus: dated.id }, now);
   expect(moved.focusId).toBe(dated.id);
   expect(moved.dates[0]).toBe("2026-11-16");
-  expect(moved.tasks.find((task) => task.id === dated.id)?.date).toBe(
-    "2026-11-16",
-  );
+  const focused = moved.tasks.find((task) => task.id === dated.id)!;
+  expect("date" in focused ? focused.date : undefined).toBe("2026-11-16");
   expect((await readWeek(user, { focus: listed.id }, now)).focusId).toBe(
     listed.id,
   );

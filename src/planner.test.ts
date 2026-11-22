@@ -32,6 +32,9 @@ async function newUser(): Promise<string> {
 
 afterAll(() => db.$client.end());
 
+const dayOf = (task: Task) => ("date" in task ? task.date : undefined);
+const listOf = (task: Task) => ("listId" in task ? task.listId : undefined);
+
 function weekDates(first: string): string[] {
   const [year, month, day] = first.split("-").map(Number);
   return Array.from({ length: 7 }, (_, offset) =>
@@ -169,7 +172,7 @@ test("unfinished tasks from past days roll over to the end of today, in date the
 
   const titlesOn = async (date: string) =>
     (await readWeek(user, {}, now)).tasks
-      .filter((task) => task.date === date)
+      .filter((task) => dayOf(task) === date)
       .map((task) => task.title);
 
   for (let read = 0; read < 2; read++) {
@@ -183,7 +186,7 @@ test("unfinished tasks from past days roll over to the end of today, in date the
     expect(await titlesOn("2026-11-15")).toEqual(["Tomorrow"]);
   }
   expect(
-    (await listTasks(other, week)).map((task) => [task.title, task.date]),
+    (await listTasks(other, week)).map((task) => [task.title, dayOf(task)]),
   ).toEqual([["Not mine", "2026-11-10"]]);
 });
 
@@ -192,7 +195,7 @@ test("nothing rolls over before the user's time zone is known", async () => {
   await createTask(user, { title: "Old", date: "2026-11-10" });
   const view = await readWeek(user, {}, new Date("2026-11-14T10:00:00Z"));
   expect(view.timeZone).toBeNull();
-  expect(view.tasks.map((task) => task.date)).toEqual(["2026-11-10"]);
+  expect(view.tasks.map(dayOf)).toEqual(["2026-11-10"]);
 });
 
 test("an unknown time zone is rejected", async () => {
@@ -217,7 +220,7 @@ test("a user writes tasks into a list and finds the list with its tasks in order
   ]);
   expect(
     view.tasks
-      .filter((task) => task.listId === errands.id)
+      .filter((task) => listOf(task) === errands.id)
       .map((task) => task.title),
   ).toEqual(["Milk", "Bread"]);
   expect(milk).toEqual({
@@ -261,7 +264,7 @@ test("a user reorders tasks within a day and moves one to a given row of another
     const { tasks } = await readWeek(user, {}, now);
     const of = (place: string) =>
       tasks
-        .filter((task) => task.date === place || task.listId === place)
+        .filter((task) => dayOf(task) === place || listOf(task) === place)
         .map((task) => task.title);
     return { tue: of("2026-11-10"), wed: of("2026-11-11"), list: of(list.id) };
   };
@@ -432,7 +435,7 @@ test("a task moves to another date or into a list, landing at the end; staying p
   await createTask(user, { title: "Haircut", date: "2026-11-10" });
   const titlesOn = async (date: string) =>
     (await listTasks(user, week))
-      .filter((task) => task.date === date)
+      .filter((task) => dayOf(task) === date)
       .map((task) => task.title);
 
   await updateTask(user, gym.id, { placement: { date: "2026-11-13" } });
@@ -451,7 +454,7 @@ test("a task moves to another date or into a list, landing at the end; staying p
   const view = await readWeek(user, {}, new Date("2026-11-10T10:00:00Z"));
   expect(
     view.tasks
-      .filter((task) => task.listId === inbox.id)
+      .filter((task) => listOf(task) === inbox.id)
       .map((task) => task.title),
   ).toEqual(["Waiting", "Gym"]);
   expect(await titlesOn("2026-11-10")).toEqual(["Haircut"]);
@@ -459,7 +462,7 @@ test("a task moves to another date or into a list, landing at the end; staying p
 
 const daily = { every: "day", interval: 1, until: null } as const;
 const placesOf = (list: Task[]) =>
-  list.map((task) => [task.date ?? task.listId, task.title, task.completed]);
+  list.map((task) => [dayOf(task) ?? listOf(task), task.title, task.completed]);
 
 test("a task made daily falls on every following day of the range, only for its owner", async () => {
   const user = await newUser();
@@ -603,7 +606,7 @@ test("a monthly series on the 31st can move to the 1st of the next month", async
   });
   expect(
     (await listTasks(user, { from: "2027-02-01", to: "2027-03-31" })).map(
-      (task) => task.date,
+      dayOf,
     ),
   ).toEqual(["2027-03-01", "2027-03-31"]);
 });
@@ -628,7 +631,7 @@ test("missed occurrences of past days roll over to today and remember their day;
     const { tasks } = await readWeek(user, {}, now);
     expect(
       tasks.map((task) => [
-        task.date,
+        dayOf(task),
         task.recurrence?.occurrence,
         task.completed,
       ]),
@@ -678,7 +681,7 @@ test("changing the rule of a missed occurrence keeps the other missed ones on to
   });
   const { tasks } = await readWeek(user, {}, now);
   expect(
-    tasks.map((task) => [task.date, task.recurrence?.occurrence ?? null]),
+    tasks.map((task) => [dayOf(task), task.recurrence?.occurrence ?? null]),
   ).toEqual([
     ["2026-11-13", "2026-11-13"],
     ["2026-11-13", null],
@@ -725,7 +728,7 @@ test("queryTasks filters stored and virtual tasks by placement status and litera
   const range = { from: "2026-11-20", to: "2026-11-22" };
   expect(
     (await queryTasks(user, range, now)).map((task) => [
-      task.date,
+      dayOf(task),
       task.title,
       task.completed,
     ]),
@@ -740,7 +743,7 @@ test("queryTasks filters stored and virtual tasks by placement status and litera
   ]);
   expect(
     (await queryTasks(user, { ...range, completed: "false" }, now)).map(
-      (task) => [task.date, task.title],
+      (task) => [dayOf(task), task.title],
     ),
   ).toEqual([
     ["2026-11-21", "Standup"],
@@ -822,7 +825,7 @@ test("task queries and week reads share timezone rollover without duplicates", a
   const shape = (tasks: Task[]) =>
     tasks
       .map((task) => [
-        task.date,
+        dayOf(task),
         task.title,
         task.recurrence?.occurrence ?? null,
       ])
@@ -834,7 +837,7 @@ test("task queries and week reads share timezone rollover without duplicates", a
     ["2026-11-10", "Overdue", null],
   ]);
   expect(
-    shape(week.tasks.filter((task) => task.date! <= "2026-11-10")),
+    shape(week.tasks.filter((task) => (dayOf(task) ?? "~") <= "2026-11-10")),
   ).toEqual(shape(first));
   expect(week.today).toBe("2026-11-10");
 
@@ -843,7 +846,7 @@ test("task queries and week reads share timezone rollover without duplicates", a
   expect(
     (
       await queryTasks(other, { from: "2026-11-08", to: "2026-11-08" }, now)
-    ).map((task) => [task.date, task.title]),
+    ).map((task) => [dayOf(task), task.title]),
   ).toEqual([["2026-11-08", "No zone"]]);
 });
 

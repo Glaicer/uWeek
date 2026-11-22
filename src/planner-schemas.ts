@@ -103,6 +103,12 @@ const checklistItem = z.strictObject({
   completed: z.boolean(),
 });
 
+const recurrence = z.object({
+  seriesId: z.uuid(),
+  occurrence: isoDate,
+  repeat,
+});
+
 const taskFields = {
   id: taskId,
   title,
@@ -110,13 +116,7 @@ const taskFields = {
   notes: z.string(),
   color: z.enum(taskColorValues).nullable(),
   checklist: z.array(checklistItem).max(200),
-  recurrence: z
-    .object({
-      seriesId: z.uuid(),
-      occurrence: isoDate,
-      repeat,
-    })
-    .optional(),
+  recurrence: recurrence.optional(),
 };
 
 export const taskResult = z.xor([
@@ -125,6 +125,11 @@ export const taskResult = z.xor([
 ]);
 
 export const listResult = z.strictObject({ id: listId, title });
+
+export type ChecklistItem = z.output<typeof checklistItem>;
+export type Recurrence = z.output<typeof recurrence>;
+export type Task = z.output<typeof taskResult>;
+export type TaskList = z.output<typeof listResult>;
 
 export const completionFields = {
   completed: z.enum(["true", "false"]).optional(),

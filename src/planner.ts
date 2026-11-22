@@ -21,7 +21,6 @@ import {
 } from "./calendar";
 import { db } from "./db/client";
 import { checklistItems, lists, tasks, taskSeries, users } from "./db/schema";
-import { type Placement, type TaskColor } from "./model";
 import { occurrences, type Repeat, type Series } from "./recurrence";
 import {
   edits,
@@ -38,40 +37,17 @@ import {
   taskId,
   taskQuery,
   weekQuery,
+  type ChecklistItem,
+  type Recurrence,
+  type Task,
   type TaskEdits,
+  type TaskList,
 } from "./planner-schemas";
 
-export type { TaskEdits };
+export type { ChecklistItem, Recurrence, Task, TaskEdits, TaskList };
 export { weekQuery };
 
-export interface ChecklistItem {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
-export type Task = {
-  id: string;
-  title: string;
-  completed: boolean;
-  notes: string;
-  color: TaskColor | null;
-  checklist: ChecklistItem[];
-  recurrence?: Recurrence;
-} & Placement;
-
-export interface Recurrence {
-  seriesId: string;
-  occurrence: string;
-  repeat: Repeat;
-}
-
 export type Scope = "this" | "following";
-
-export interface TaskList {
-  id: string;
-  title: string;
-}
 
 export interface SearchResult {
   id: string;
@@ -231,6 +207,9 @@ function toTask(
 const occurrenceIdOf = (seriesId: string, date: string) =>
   `${seriesId}_${date}`;
 
+// why: list tasks sort after every dated one
+const dayOf = (task: Task) => ("date" in task ? task.date : "~");
+
 function virtualTask(series: SeriesRow, date: string): Task {
   return {
     id: occurrenceIdOf(series.id, date),
@@ -361,7 +340,7 @@ async function withOccurrences(
       .filter((task) => !taken.has(task.id)),
   );
   return [...read, ...virtual].sort((a, b) =>
-    a.date === b.date ? 0 : (a.date ?? "~") < (b.date ?? "~") ? -1 : 1,
+    dayOf(a) === dayOf(b) ? 0 : dayOf(a) < dayOf(b) ? -1 : 1,
   );
 }
 
