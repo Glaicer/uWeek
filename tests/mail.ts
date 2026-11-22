@@ -35,5 +35,6 @@ export async function signIn(page: Page, email = uniqueEmail()): Promise<void> {
   await page.getByRole("button", { name: "Send link" }).click();
   await expect(page.getByRole("status")).toContainText(email);
   await page.goto(await signInLinkFor(email));
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/$/);
 }

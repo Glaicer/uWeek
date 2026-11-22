@@ -35,8 +35,12 @@ export const auth = betterAuth({
   plugins: [
     magicLink({
       expiresIn: signInLinkMinutes * 60,
-      sendMagicLink: ({ email, url }) =>
-        sendSignInLink(email, url, signInLinkMinutes),
+      // why: better-auth's own verify URL consumes the one-time token on GET, so mail scanners and prefetchers sign the person in or burn the link; the emailed URL is a pure GET page that verifies only on submit
+      sendMagicLink: ({ email, token }) => {
+        const url = new URL("/sign-in/confirm", process.env.BETTER_AUTH_URL);
+        url.searchParams.set("token", token);
+        return sendSignInLink(email, url.toString(), signInLinkMinutes);
+      },
     }),
     nextCookies(),
   ],

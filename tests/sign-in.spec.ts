@@ -22,6 +22,7 @@ test("a visitor signs in with the emailed link, stays signed in after a browser 
     `Check your email. We sent a sign-in link to ${email}.`,
   );
   await page.goto(await signInLinkFor(email));
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
 
@@ -44,6 +45,29 @@ test("a visitor signs in with the emailed link, stays signed in after a browser 
   await restarted.close();
 });
 
+test("a link opened by a prefetcher still signs in", async ({
+  page,
+  request,
+}) => {
+  const email = uniqueEmail();
+  await page.goto("/sign-in");
+  await page.getByRole("textbox", { name: "Email" }).fill(email);
+  await page.getByRole("button", { name: "Send link" }).click();
+  await expect(page.getByRole("status")).toContainText(email);
+  const link = await signInLinkFor(email);
+
+  const bot = { "user-agent": "CopyousBot/1.0" };
+  expect((await request.get(link, { headers: bot })).ok()).toBe(true);
+  expect((await request.head(link, { headers: bot })).ok()).toBe(true);
+  expect((await request.get(link, { headers: bot })).ok()).toBe(true);
+  expect((await request.storageState()).cookies).toEqual([]);
+
+  await page.goto(link);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
+});
+
 test("a used sign-in link does not sign in again", async ({
   page,
   browser,
@@ -54,6 +78,7 @@ test("a used sign-in link does not sign in again", async ({
 
   const other = await browser.newPage();
   await other.goto(link);
+  await other.getByRole("button", { name: "Sign in" }).click();
   await expect(other).toHaveURL(/\/sign-in\?error=INVALID_TOKEN$/);
   await expect(other.getByRole("main").getByRole("alert")).toHaveText(
     "This link has expired or was already used. Request a new one.",

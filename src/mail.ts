@@ -45,11 +45,11 @@ export function sendSignInLink(
   url: string,
   minutes: number,
 ): Promise<void> {
-  const notice = `The link works once and expires in ${minutes} minutes. If you did not ask for it, ignore this email.`;
+  const notice = `Press Sign in on the page to finish. The link works once and expires in ${minutes} minutes. If you did not ask for it, ignore this email.`;
   return send({
     to: email,
     subject: "Sign in to uWeek",
-    text: `Open this link to sign in to uWeek:\n\n${url}\n\n${notice}`,
-    html: `<p>Open this link to sign in to uWeek:</p><p><a href="${escapeHtml(url)}">Sign in</a></p><p>${notice}</p>`,
+    text: `Open this link and press Sign in to sign in to uWeek:\n\n${url}\n\n${notice}`,
+    html: `<p>Open this link and press Sign in to sign in to uWeek:</p><p><a href="${escapeHtml(url)}">Sign in</a></p><p>${notice}</p>`,
   });
 }
