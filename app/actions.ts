@@ -112,22 +112,14 @@ export async function updateTask(
   edits: TaskEdits,
   scope: Scope = "this",
 ): Promise<Task> {
-  const task = await planner.updateTask(
-    await currentUserId(),
-    id,
-    edits,
-    scope,
-  );
-  if (!task) throw new Error("Task not found");
-  return task;
+  return planner.updateTask(await currentUserId(), id, edits, scope);
 }
 
 export async function deleteTask(
   id: string,
   scope: Scope = "this",
 ): Promise<void> {
-  if (!(await planner.deleteTask(await currentUserId(), id, scope)))
-    throw new Error("Task not found");
+  await planner.deleteTask(await currentUserId(), id, scope);
 }
 
 export async function listTasks(from: string, to: string): Promise<Task[]> {
@@ -150,17 +142,13 @@ export async function createList(title: string): Promise<TaskList> {
 }
 
 export async function renameList(id: string, title: string): Promise<TaskList> {
-  const list = await planner.renameList(await currentUserId(), id, { title });
-  if (!list) throw new Error("List not found");
-  return list;
+  return planner.renameList(await currentUserId(), id, { title });
 }
 
 export async function moveList(id: string, to: number): Promise<void> {
-  if (!(await planner.moveList(await currentUserId(), id, { to })))
-    throw new Error("List not found");
+  await planner.moveList(await currentUserId(), id, { to });
 }
 
 export async function deleteList(id: string): Promise<void> {
-  if (!(await planner.deleteList(await currentUserId(), id)))
-    throw new Error("List not deleted");
+  await planner.deleteList(await currentUserId(), id);
 }

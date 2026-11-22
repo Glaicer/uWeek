@@ -12,11 +12,10 @@ import {
   createTask,
   deleteTask,
   listLists,
-  PlannerNotFoundError,
+  PlannerInputError,
   queryTasks,
   readWeek,
   searchTasks,
-  type Task,
   updateTask,
 } from "./planner";
 import {
@@ -24,12 +23,10 @@ import {
   edits,
   isoDate,
   listId,
-  newTask,
   placement,
   scope,
   searchQuery,
   taskId,
-  taskQuery,
   title,
 } from "./planner-schemas";
 
@@ -85,12 +82,6 @@ function toolInput<Shape extends z.ZodRawShape>(shape: Shape) {
   >;
 }
 
-async function requireTask(task: Promise<Task | null>): Promise<Task> {
-  const found = await task;
-  if (!found) throw new PlannerNotFoundError();
-  return found;
-}
-
 // why: tool schemas stay flat z.object — Claude rejects a top-level oneOf, so planner unions are parsed inside callbacks
 function plannerServer(caller: Caller): McpServer {
   const server = new McpServer(
@@ -136,11 +127,13 @@ function plannerServer(caller: Caller): McpServer {
       return run(() =>
         queryTasks(
           caller.userId,
-          taskQuery.parse({
+          {
             ...where,
-            ...(completed !== undefined && { completed: String(completed) }),
+            ...(completed !== undefined && {
+              completed: completed ? "true" : "false",
+            }),
             ...(text !== undefined && { q: text }),
-          }),
+          },
           caller.now,
         ),
       );
@@ -184,7 +177,7 @@ function plannerServer(caller: Caller): McpServer {
         listId: listId.optional().describe("List to place the task in."),
       }),
     },
-    async (args) => run(() => createTask(caller.userId, newTask.parse(args))),
+    async (args) => run(() => createTask(caller.userId, args)),
   );
 
   server.registerTool(
@@ -203,9 +196,7 @@ function plannerServer(caller: Caller): McpServer {
     },
     async (args) => {
       const { id, scope: inScope, ...changes } = args;
-      return run(() =>
-        requireTask(updateTask(caller.userId, id, changes, inScope)),
-      );
+      return run(() => updateTask(caller.userId, id, changes, inScope));
     },
   );
 
@@ -227,9 +218,7 @@ function plannerServer(caller: Caller): McpServer {
     async (args) => {
       const { id, ...to } = args;
       return run(() =>
-        requireTask(
-          updateTask(caller.userId, id, { placement: placement.parse(to) }),
-        ),
+        updateTask(caller.userId, id, { placement: placement.parse(to) }),
       );
     },
   );
@@ -241,9 +230,7 @@ function plannerServer(caller: Caller): McpServer {
       inputSchema: toolInput({ id: taskId.describe("Task id.") }),
     },
     async ({ id }) =>
-      run(() =>
-        requireTask(updateTask(caller.userId, id, { completed: true })),
-      ),
+      run(() => updateTask(caller.userId, id, { completed: true })),
   );
 
   server.registerTool(
@@ -262,13 +249,21 @@ function plannerServer(caller: Caller): McpServer {
     },
     async ({ id, scope: inScope }) =>
       run(async () => {
-        if (!(await deleteTask(caller.userId, id, inScope)))
-          throw new PlannerNotFoundError();
+        await deleteTask(caller.userId, id, inScope);
         return { id, deleted: true };
       }),
   );
 
   return server;
+}
+
+// why: an agent gets the field that failed, while REST keeps the one generic 400 body
+function refusalText(error: unknown): string {
+  if (error instanceof PlannerInputError && error.cause instanceof z.ZodError)
+    return z.prettifyError(error.cause);
+  return error instanceof z.ZodError
+    ? z.prettifyError(error)
+    : apiErrorOf(error).message;
 }
 
 async function run(action: () => Promise<unknown>): Promise<CallToolResult> {
@@ -277,15 +272,7 @@ async function run(action: () => Promise<unknown>): Promise<CallToolResult> {
     return { content: [{ type: "text", text: JSON.stringify(value) }] };
   } catch (error) {
     return {
-      content: [
-        {
-          type: "text",
-          text:
-            error instanceof z.ZodError
-              ? z.prettifyError(error)
-              : apiErrorOf(error).message,
-        },
-      ],
+      content: [{ type: "text", text: refusalText(error) }],
       isError: true,
     };
   }

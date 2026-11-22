@@ -10,6 +10,8 @@ import {
   getTask,
   listLists,
   moveList,
+  PlannerConflictError,
+  PlannerInputError,
   PlannerNotFoundError,
   queryTasks,
   readWeek,
@@ -57,10 +59,12 @@ test("a user sees only their own tasks and cannot change or delete another user'
   });
 
   expect(await readTasks(bob, week)).toEqual([]);
-  expect(
-    await updateTask(bob, task.id, { title: "Hacked", completed: true }),
-  ).toBeNull();
-  expect(await deleteTask(bob, task.id)).toBe(false);
+  await expect(
+    updateTask(bob, task.id, { title: "Hacked", completed: true }),
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
+  await expect(deleteTask(bob, task.id)).rejects.toBeInstanceOf(
+    PlannerNotFoundError,
+  );
 
   expect(await readTasks(alice, week)).toEqual([
     {
@@ -97,7 +101,7 @@ test("the owner completes, uncompletes, renames and deletes tasks; a day keeps i
     "Call dad",
   ]);
 
-  expect(await deleteTask(user, first.id)).toBe(true);
+  await deleteTask(user, first.id);
   expect((await readTasks(user, week)).map((task) => task.title)).toEqual([
     "Call dad",
   ]);
@@ -107,15 +111,15 @@ test("a blank title is rejected", async () => {
   const user = await newUser();
   await expect(
     createTask(user, { title: "   ", date: "2026-11-13" }),
-  ).rejects.toThrow();
+  ).rejects.toBeInstanceOf(PlannerInputError);
   expect(await readTasks(user, week)).toEqual([]);
 });
 
 test("an edit that changes nothing is rejected as invalid", async () => {
   const user = await newUser();
   const task = await createTask(user, { title: "Gym", date: "2026-11-13" });
-  await expect(updateTask(user, task.id, {})).rejects.toThrow(
-    "Nothing to change",
+  await expect(updateTask(user, task.id, {})).rejects.toBeInstanceOf(
+    PlannerInputError,
   );
 });
 
@@ -206,7 +210,7 @@ test("an unknown time zone is rejected", async () => {
   const user = await newUser();
   await expect(
     updateSettings(user, { timeZone: "Mars/Olympus" }),
-  ).rejects.toThrow();
+  ).rejects.toBeInstanceOf(PlannerInputError);
 });
 
 test("a user writes tasks into a list and finds the list with its tasks in order beside the week", async () => {
@@ -252,7 +256,7 @@ test("a user renames lists and moves them to another place in the order", async 
   });
   await expect(renameList(user, second.id, { title: " " })).rejects.toThrow();
 
-  expect(await moveList(user, third.id, { to: 0 })).toBe(true);
+  await moveList(user, third.id, { to: 0 });
   expect(await titles()).toEqual(["C", "A", "Errands"]);
   await moveList(user, third.id, { to: 2 });
   expect(await titles()).toEqual(["A", "Errands", "C"]);
@@ -319,8 +323,10 @@ test("deleting a list deletes its tasks; the last list stays", async () => {
   await createTask(user, { title: "Kept", listId: keep.id });
   await createTask(user, { title: "Gone", listId: drop.id });
 
-  expect(await deleteList(user, drop.id)).toBe(true);
-  expect(await deleteList(user, keep.id)).toBe(false);
+  await deleteList(user, drop.id);
+  await expect(deleteList(user, keep.id)).rejects.toThrow(
+    "Cannot delete the last list",
+  );
 
   const view = await readWeek(user, {}, new Date());
   expect(view.lists).toEqual([{ id: keep.id, title: "Keep" }]);
@@ -339,12 +345,13 @@ test("a user neither sees nor changes another user's lists and cannot write into
     expect.objectContaining({ title: "Bob's" }),
   ]);
   expect((await readWeek(bob, {}, new Date())).tasks).toEqual([]);
-  expect(await renameList(bob, list.id, { title: "Hacked" })).toBeNull();
-  expect(await moveList(bob, list.id, { to: 0 })).toBe(false);
-  expect(await deleteList(bob, list.id)).toBe(false);
-  await expect(
-    createTask(bob, { title: "Planted", listId: list.id }),
-  ).rejects.toThrow();
+  for (const refusal of [
+    () => renameList(bob, list.id, { title: "Hacked" }),
+    () => moveList(bob, list.id, { to: 0 }),
+    () => deleteList(bob, list.id),
+    () => createTask(bob, { title: "Planted", listId: list.id }),
+  ])
+    await expect(refusal()).rejects.toBeInstanceOf(PlannerNotFoundError);
 
   const view = await readWeek(alice, {}, new Date());
   expect(view.lists.map((list) => list.title)).toEqual(["Private", "Second"]);
@@ -411,16 +418,16 @@ test("a user cannot read, change or move another user's task details", async () 
   const item = { id: crypto.randomUUID(), text: "Hidden", completed: false };
   await updateTask(alice, task.id, { notes: "Private", checklist: [item] });
 
-  expect(
-    await updateTask(bob, task.id, {
+  await expect(
+    updateTask(bob, task.id, {
       notes: "Hacked",
       checklist: [],
       placement: { listId: bobs.id },
     }),
-  ).toBeNull();
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
   await expect(
     updateTask(alice, task.id, { placement: { listId: bobs.id } }),
-  ).rejects.toThrow();
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
   expect(await readTasks(alice, week)).toEqual([
     expect.objectContaining({
       date: "2026-11-13",
@@ -490,8 +497,12 @@ test("a task made daily falls on every following day of the range, only for its 
     recurrence: { occurrence: "2026-11-13", repeat: daily },
   });
   expect(await readTasks(other, week)).toEqual([]);
-  expect(await updateTask(other, listed[1].id, { completed: true })).toBeNull();
-  expect(await deleteTask(other, listed[1].id)).toBe(false);
+  await expect(
+    updateTask(other, listed[1].id, { completed: true }),
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
+  await expect(deleteTask(other, listed[1].id)).rejects.toBeInstanceOf(
+    PlannerNotFoundError,
+  );
 });
 
 test("an occurrence is completed, renamed and deleted on its own and keeps its id", async () => {
@@ -506,7 +517,7 @@ test("an occurrence is completed, renamed and deleted on its own and keeps its i
     completed: true,
   });
   await updateTask(user, wed.id, { title: "Read a chapter" });
-  expect(await deleteTask(user, thu.id)).toBe(true);
+  await deleteTask(user, thu.id);
 
   const listed = await readTasks(user, week);
   expect(placesOf(listed)).toEqual([
@@ -547,7 +558,7 @@ test("this and following ends the old series the day before and starts a new one
   expect(after[6].color).toBe("green");
   expect(after[6].recurrence?.seriesId).not.toBe(after[2].recurrence?.seriesId);
 
-  expect(await deleteTask(user, after[3].id, "following")).toBe(true);
+  await deleteTask(user, after[3].id, "following");
   expect(placesOf(await readTasks(user, week))).toEqual([
     ["2026-11-09", "Run", false],
     ["2026-11-10", "Run", false],
@@ -670,7 +681,7 @@ test("deleting this and following leaves the days before and keeps completed occ
   const before = await readTasks(user, week);
   await updateTask(user, before[5].id, { completed: true });
 
-  expect(await deleteTask(user, before[2].id, "following")).toBe(true);
+  await deleteTask(user, before[2].id, "following");
   const after = await readTasks(user, week);
   expect(placesOf(after)).toEqual([
     ["2026-11-09", "Walk", false],
@@ -700,7 +711,9 @@ test("only a dated task repeats", async () => {
   const user = await newUser();
   const list = await createList(user, { title: "Someday" });
   const task = await createTask(user, { title: "Idea", listId: list.id });
-  await expect(updateTask(user, task.id, { repeat: daily })).rejects.toThrow();
+  await expect(updateTask(user, task.id, { repeat: daily })).rejects.toThrow(
+    "Only a dated task repeats",
+  );
 });
 
 test("missed occurrences of past days roll over to today and remember their day; future ones stay", async () => {
@@ -953,7 +966,7 @@ test("getTask reads stored and virtual occurrences without materializing a futur
     date: "2026-11-09",
   });
   const started = await updateTask(user, first.id, { repeat: daily });
-  const seriesId = started!.recurrence!.seriesId;
+  const seriesId = started.recurrence!.seriesId;
   const before = await countRows(user);
 
   const virtualId = `${seriesId}_2026-11-12`;
@@ -978,19 +991,27 @@ test("getTask reads stored and virtual occurrences without materializing a futur
   });
 
   await deleteTask(user, `${seriesId}_2026-11-11`);
-  expect(await getTask(user, `${seriesId}_2026-11-11`, now)).toBeNull();
-
-  expect(await getTask(user, crypto.randomUUID(), now)).toBeNull();
-  expect(await getTask(user, `${seriesId}_2026-11-01`, now)).toBeNull();
-  expect(await getTask(other, plain.id, now)).toBeNull();
+  for (const gone of [
+    `${seriesId}_2026-11-11`,
+    crypto.randomUUID(),
+    `${seriesId}_2026-11-01`,
+  ])
+    await expect(getTask(user, gone, now)).rejects.toBeInstanceOf(
+      PlannerNotFoundError,
+    );
+  await expect(getTask(other, plain.id, now)).rejects.toBeInstanceOf(
+    PlannerNotFoundError,
+  );
 
   const foreign = await createTask(other, {
     title: "Theirs",
     date: "2026-11-09",
   });
   const foreignSeries = await updateTask(other, foreign.id, { repeat: daily });
-  const foreignId = foreignSeries!.recurrence!.seriesId;
-  expect(await getTask(user, `${foreignId}_2026-11-12`, now)).toBeNull();
+  const foreignId = foreignSeries.recurrence!.seriesId;
+  await expect(
+    getTask(user, `${foreignId}_2026-11-12`, now),
+  ).rejects.toBeInstanceOf(PlannerNotFoundError);
   expect(await getTask(other, `${foreignId}_2026-11-12`, now)).toMatchObject({
     title: "Theirs",
     date: "2026-11-12",
@@ -1009,7 +1030,7 @@ test("deleting this and following removes an unfinished occurrence moved off its
   await updateTask(user, before[2].id, {
     placement: { date: "2026-11-20" },
   });
-  expect(await deleteTask(user, before[1].id, "following")).toBe(true);
+  await deleteTask(user, before[1].id, "following");
   expect(
     placesOf(await readTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
   ).toEqual([["2026-11-09", "Walk", false]]);
@@ -1041,5 +1062,104 @@ test("changing the rule deletes materialized unfinished occurrences after the sp
     ["2026-11-10", "Gym", false],
     ["2026-11-17", "Gym", false],
     ["2026-11-24", "Gym", false],
+  ]);
+});
+
+test("a foreign or missing id is not found by every operation that takes one", async () => {
+  const user = await newUser();
+  const other = await newUser();
+  const now = new Date("2026-11-09T10:00:00Z");
+  const keep = await createList(user, { title: "Keep" });
+  const second = await createList(user, { title: "Second" });
+  const theirs = await createList(other, { title: "Theirs" });
+  const mine = await createTask(user, { title: "Mine", date: "2026-11-13" });
+  const theirTask = await createTask(other, {
+    title: "Theirs",
+    date: "2026-11-13",
+  });
+  const missing = crypto.randomUUID();
+
+  for (const ref of [
+    () => renameList(user, theirs.id, { title: "Hacked" }),
+    () => moveList(user, theirs.id, { to: 0 }),
+    () => deleteList(user, theirs.id),
+    () => queryTasks(user, { listId: theirs.id }, now),
+    () => renameList(user, missing, { title: "Hacked" }),
+    () => moveList(user, missing, { to: 0 }),
+    () => deleteList(user, missing),
+    () => queryTasks(user, { listId: missing }, now),
+    () => updateTask(user, theirTask.id, { title: "Hacked" }),
+    () => deleteTask(user, theirTask.id),
+    () => getTask(user, theirTask.id, now),
+    () => updateTask(user, missing, { title: "Hacked" }),
+    () => deleteTask(user, missing),
+    () => getTask(user, missing, now),
+  ])
+    await expect(ref()).rejects.toBeInstanceOf(PlannerNotFoundError);
+
+  for (const listId of [theirs.id, missing]) {
+    await expect(
+      createTask(user, { title: "Planted", listId }),
+    ).rejects.toBeInstanceOf(PlannerNotFoundError);
+    await expect(
+      updateTask(user, mine.id, { placement: { listId } }),
+    ).rejects.toBeInstanceOf(PlannerNotFoundError);
+  }
+
+  expect(await listLists(user)).toEqual([
+    { id: keep.id, title: "Keep" },
+    { id: second.id, title: "Second" },
+  ]);
+  expect(await getTask(user, mine.id, now)).toMatchObject({
+    id: mine.id,
+    title: "Mine",
+    date: "2026-11-13",
+  });
+});
+
+test("deleting the last list is a conflict", async () => {
+  const user = await newUser();
+  const only = await createList(user, { title: "Inbox" });
+
+  await expect(deleteList(user, only.id)).rejects.toBeInstanceOf(
+    PlannerConflictError,
+  );
+  await expect(deleteList(user, only.id)).rejects.toThrow(
+    "Cannot delete the last list",
+  );
+  expect(await listLists(user)).toEqual([{ id: only.id, title: "Inbox" }]);
+});
+
+test("a malformed id is invalid input rather than a schema error", async () => {
+  const user = await newUser();
+  const now = new Date("2026-11-09T10:00:00Z");
+
+  for (const ref of [
+    () => getTask(user, "not-a-task-id", now),
+    () => updateTask(user, "not-a-task-id", { title: "Gym" }),
+    () => deleteTask(user, "not-a-task-id"),
+    () => renameList(user, "not-a-list-id", { title: "Errands" }),
+    () => moveList(user, "not-a-list-id", { to: 0 }),
+    () => deleteList(user, "not-a-list-id"),
+  ])
+    await expect(ref()).rejects.toBeInstanceOf(PlannerInputError);
+});
+
+test("a checklist id already used by another task is a conflict and changes nothing", async () => {
+  const user = await newUser();
+  const other = await newUser();
+  const mine = await createTask(user, { title: "Mine", date: "2026-11-13" });
+  const theirs = await createTask(other, {
+    title: "Theirs",
+    date: "2026-11-13",
+  });
+  const item = { id: crypto.randomUUID(), text: "One", completed: false };
+  await updateTask(other, theirs.id, { checklist: [item] });
+
+  await expect(
+    updateTask(user, mine.id, { checklist: [item], notes: "Changed" }),
+  ).rejects.toBeInstanceOf(PlannerConflictError);
+  expect(await readTasks(user, week)).toEqual([
+    expect.objectContaining({ id: mine.id, notes: "", checklist: [] }),
   ]);
 });

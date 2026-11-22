@@ -5,6 +5,8 @@ import {
   StreamableHTTPClientTransport,
   type CallToolResult,
 } from "@modelcontextprotocol/client";
+import { z } from "zod";
+import { edits, newTask } from "../src/planner-schemas";
 import { newApiUser, pinnedNow } from "./api-helpers";
 import { testClockCookie } from "./clock";
 
@@ -28,6 +30,16 @@ function text(result: CallToolResult): string {
 
 function json(result: CallToolResult): unknown {
   return JSON.parse(text(result));
+}
+
+// why: a Playwright worker loads zod without the English locale the server installs, so its messages would read differently
+z.config(z.locales.en());
+
+function explanation(schema: z.ZodType, input: unknown): string {
+  const parsed = schema.safeParse(input);
+  if (parsed.success)
+    throw new Error("expected the planner schema to refuse this input");
+  return z.prettifyError(parsed.error);
 }
 
 test("an agent without a valid token is refused", async ({
@@ -278,6 +290,52 @@ test("tool errors reach the agent as tool results", async ({
     await otherClient?.close();
     await user.close();
     await other.close();
+  }
+});
+
+test("an invalid tool argument comes back as the schema's own explanation", async ({
+  browser,
+  baseURL,
+}) => {
+  const user = await newApiUser(browser, baseURL!);
+  let client: Client | undefined;
+  try {
+    client = await connect(baseURL!, user.token);
+    const twoPlaces = {
+      title: "Two places",
+      date: "2026-11-10",
+      listId: crypto.randomUUID(),
+    };
+    const placed = await client.callTool({
+      name: "create_task",
+      arguments: twoPlaces,
+    });
+    expect(placed.isError).toBe(true);
+    expect(text(placed)).toBe(explanation(newTask, twoPlaces));
+
+    const task = json(
+      await client.callTool({
+        name: "create_task",
+        arguments: { title: "Mine", date: "2026-11-09" },
+      }),
+    ) as { id: string };
+    const unchanged = await client.callTool({
+      name: "update_task",
+      arguments: { id: task.id },
+    });
+    expect(unchanged.isError).toBe(true);
+    expect(text(unchanged)).toBe(explanation(edits, {}));
+
+    const refused = await user.client.post("/api/v1/tasks", {
+      data: twoPlaces,
+    });
+    expect(refused.status()).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: { code: "invalid_request", message: "Invalid request" },
+    });
+  } finally {
+    await client?.close();
+    await user.close();
   }
 });
 
