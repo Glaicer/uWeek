@@ -12,6 +12,7 @@ import {
   createTask,
   deleteTask,
   listLists,
+  PlannerInputError,
   queryTasks,
   readWeek,
   searchTasks,
@@ -256,21 +257,22 @@ function plannerServer(caller: Caller): McpServer {
   return server;
 }
 
+// why: an agent gets the field that failed, while REST keeps the one generic 400 body
+function refusalText(error: unknown): string {
+  if (error instanceof PlannerInputError && error.cause instanceof z.ZodError)
+    return z.prettifyError(error.cause);
+  return error instanceof z.ZodError
+    ? z.prettifyError(error)
+    : apiErrorOf(error).message;
+}
+
 async function run(action: () => Promise<unknown>): Promise<CallToolResult> {
   try {
     const value = await action();
     return { content: [{ type: "text", text: JSON.stringify(value) }] };
   } catch (error) {
     return {
-      content: [
-        {
-          type: "text",
-          text:
-            error instanceof z.ZodError
-              ? z.prettifyError(error)
-              : apiErrorOf(error).message,
-        },
-      ],
+      content: [{ type: "text", text: refusalText(error) }],
       isError: true,
     };
   }

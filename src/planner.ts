@@ -52,7 +52,7 @@ export class PlannerNotFoundError extends Error {}
 export class PlannerInputError extends Error {}
 export class PlannerConflictError extends Error {}
 
-// why: the interface answers in its own exceptions, so no adapter has to know the shape of a zod error
+// why: the interface answers in its own exceptions, and the zod cause stays for the adapter that speaks to an agent
 function parseInput<Schema extends z.ZodType>(
   schema: Schema,
   value: unknown,
@@ -61,7 +61,7 @@ function parseInput<Schema extends z.ZodType>(
     return schema.parse(value);
   } catch (error) {
     if (error instanceof z.ZodError)
-      throw new PlannerInputError("Invalid request");
+      throw new PlannerInputError("Invalid request", { cause: error });
     throw error;
   }
 }
