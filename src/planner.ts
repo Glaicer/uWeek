@@ -48,6 +48,68 @@ import {
 export type { ChecklistItem, Recurrence, Task, TaskEdits, TaskList };
 export { weekQuery };
 
+export class PlannerNotFoundError extends Error {}
+export class PlannerInputError extends Error {}
+export class PlannerConflictError extends Error {}
+
+// why: the interface answers in its own exceptions, so no adapter has to know the shape of a zod error
+function parseInput<Schema extends z.ZodType>(
+  schema: Schema,
+  value: unknown,
+): z.output<Schema> {
+  try {
+    return schema.parse(value);
+  } catch (error) {
+    if (error instanceof z.ZodError)
+      throw new PlannerInputError("Invalid request");
+    throw error;
+  }
+}
+
+function postgresFailure(
+  error: unknown,
+): { code: string; constraint: string | undefined } | null {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
+    const { code, constraint } = current as Error & {
+      code?: unknown;
+      constraint?: unknown;
+    };
+    if (typeof code === "string")
+      return {
+        code,
+        constraint: typeof constraint === "string" ? constraint : undefined,
+      };
+    current = current.cause;
+  }
+  return null;
+}
+
+// why: only a task in a missing or foreign list is not found and only a taken id is a conflict; every other database error stays a 500
+async function translated<Value>(action: () => Promise<Value>): Promise<Value> {
+  try {
+    return await action();
+  } catch (error) {
+    const failure = postgresFailure(error);
+    if (
+      failure?.code === "23503" &&
+      failure.constraint === "tasks_user_id_list_id_lists_user_id_id_fk"
+    )
+      throw new PlannerNotFoundError("List not found");
+    if (failure?.code === "23505")
+      throw new PlannerConflictError(
+        "The request conflicts with existing data",
+      );
+    throw error;
+  }
+}
+
+function required<Value>(value: Value | null | undefined, what: string): Value {
+  if (value === null || value === undefined)
+    throw new PlannerNotFoundError(`${what} not found`);
+  return value;
+}
+
 export type Scope = "this" | "following";
 
 export interface SearchResult {
@@ -64,9 +126,9 @@ export interface SearchPage {
 
 export async function searchTasks(
   userId: string,
-  input: z.input<typeof searchQuery>,
+  input: unknown,
 ): Promise<SearchPage> {
-  const { query, cursor } = searchQuery.parse(input);
+  const { query, cursor } = parseInput(searchQuery, input);
   const pattern = `%${query.replace(/[\\%_]/g, "\\$&")}%`;
   const size = 20;
   const matches = () =>
@@ -346,10 +408,10 @@ async function withOccurrences(
 }
 
 const ownedList = (userId: string, id: string) =>
-  and(eq(lists.userId, userId), eq(lists.id, listId.parse(id)));
+  and(eq(lists.userId, userId), eq(lists.id, parseInput(listId, id)));
 
 const owned = (userId: string, id: string) =>
-  and(eq(tasks.userId, userId), eq(tasks.id, taskId.parse(id)));
+  and(eq(tasks.userId, userId), eq(tasks.id, parseInput(taskId, id)));
 
 // why: stored rows and the occurrences they replace are read from one snapshot, or a concurrent save could hide an occurrence
 const snapshot = <T>(read: (tx: Transaction) => Promise<T>) =>
@@ -358,11 +420,8 @@ const snapshot = <T>(read: (tx: Transaction) => Promise<T>) =>
     accessMode: "read only",
   });
 
-async function listTasks(
-  userId: string,
-  input: z.input<typeof range>,
-): Promise<Task[]> {
-  const { from, to } = range.parse(input);
+async function listTasks(userId: string, input: unknown): Promise<Task[]> {
+  const { from, to } = parseInput(range, input);
   return snapshot(async (tx) =>
     withOccurrences(
       tx,
@@ -426,27 +485,29 @@ const endOf = (userId: string, place: TaskPlacement) =>
 
 export async function createTask(
   userId: string,
-  input: z.input<typeof newTask>,
+  input: unknown,
 ): Promise<Task> {
-  const { title, ...placement } = newTask.parse(input);
-  const [task] = await db
-    .insert(tasks)
-    .values({
-      id: crypto.randomUUID(),
-      userId,
-      title,
-      ...placement,
-      position: endOf(userId, placement),
-    })
-    .returning(taskColumns);
-  return toTask({ ...task, checklist: [] }, new Map());
+  const { title, ...placement } = parseInput(newTask, input);
+  return translated(async () => {
+    const [task] = await db
+      .insert(tasks)
+      .values({
+        id: crypto.randomUUID(),
+        userId,
+        title,
+        ...placement,
+        position: endOf(userId, placement),
+      })
+      .returning(taskColumns);
+    return toTask({ ...task, checklist: [] }, new Map());
+  });
 }
 
 export async function createList(
   userId: string,
-  input: z.input<typeof newList>,
+  input: unknown,
 ): Promise<TaskList> {
-  const { title } = newList.parse(input);
+  const { title } = parseInput(newList, input);
   const [list] = await db
     .insert(lists)
     .values({
@@ -462,25 +523,25 @@ export async function createList(
 export async function renameList(
   userId: string,
   id: string,
-  input: z.input<typeof newList>,
-): Promise<TaskList | null> {
-  const { title } = newList.parse(input);
+  input: unknown,
+): Promise<TaskList> {
+  const { title } = parseInput(newList, input);
   const [list] = await db
     .update(lists)
     .set({ title })
     .where(ownedList(userId, id))
     .returning(listColumns);
-  return list ?? null;
+  return required(list, "List");
 }
 
 export async function moveList(
   userId: string,
   id: string,
-  input: z.input<typeof listMove>,
-): Promise<boolean> {
-  const { to } = listMove.parse(input);
-  listId.parse(id);
-  return db.transaction(async (tx) => {
+  input: unknown,
+): Promise<void> {
+  const { to } = parseInput(listMove, input);
+  parseInput(listId, id);
+  await db.transaction(async (tx) => {
     const order = (
       await tx
         .select({ id: lists.id })
@@ -490,7 +551,7 @@ export async function moveList(
         .for("update")
     ).map((list) => list.id);
     const from = order.indexOf(id);
-    if (from < 0) return false;
+    if (from < 0) throw new PlannerNotFoundError("List not found");
     order.splice(from, 1);
     order.splice(Math.min(to, order.length), 0, id);
     for (const [position, list] of order.entries())
@@ -498,23 +559,23 @@ export async function moveList(
         .update(lists)
         .set({ position })
         .where(and(eq(lists.userId, userId), eq(lists.id, list)));
-    return true;
   });
 }
 
-export async function deleteList(userId: string, id: string): Promise<boolean> {
-  listId.parse(id);
-  return db.transaction(async (tx) => {
+export async function deleteList(userId: string, id: string): Promise<void> {
+  parseInput(listId, id);
+  await db.transaction(async (tx) => {
     const userLists = await tx
       .select({ id: lists.id })
       .from(lists)
       .where(eq(lists.userId, userId))
       .for("update");
+    if (!userLists.some((list) => list.id === id))
+      throw new PlannerNotFoundError("List not found");
     // why: the Someday band always has a list to write into
-    if (userLists.length < 2 || !userLists.some((list) => list.id === id))
-      return false;
+    if (userLists.length < 2)
+      throw new PlannerConflictError("Cannot delete the last list");
     await tx.delete(lists).where(ownedList(userId, id));
-    return true;
   });
 }
 
@@ -765,74 +826,82 @@ async function splitSeries(
 export async function updateTask(
   userId: string,
   id: string,
-  input: TaskEdits,
+  input: unknown,
   inScope: Scope = "this",
-): Promise<Task | null> {
-  const { completed, checklist, placement, repeat, ...fields } =
-    edits.parse(input);
-  const following = scope.parse(inScope) === "following";
-  return db.transaction(async (tx) => {
-    const target = await materialize(tx, userId, taskId.parse(id));
-    if (!target) return null;
-    const [task] = await tx
-      .update(tasks)
-      .set({
-        ...fields,
-        completedAt:
-          completed === undefined ? undefined : completed ? sql`now()` : null,
-        ...(placement && moveTo(userId, placement)),
-        // why: an edit of the checklist alone leaves nothing else to set, and drizzle refuses an empty set
-        updatedAt: new Date(),
-      })
-      .where(and(owned(userId, target), isNull(tasks.deletedAt)))
-      .returning(taskColumns);
-    if (!task) return null;
-    if (placement?.index !== undefined) {
-      const order = (
+): Promise<Task> {
+  const { completed, checklist, placement, repeat, ...fields } = parseInput(
+    edits,
+    input,
+  );
+  const following = parseInput(scope, inScope) === "following";
+  return translated(() =>
+    db.transaction(async (tx) => {
+      const target = required(
+        await materialize(tx, userId, parseInput(taskId, id)),
+        "Task",
+      );
+      const [task] = await tx
+        .update(tasks)
+        .set({
+          ...fields,
+          completedAt:
+            completed === undefined ? undefined : completed ? sql`now()` : null,
+          ...(placement && moveTo(userId, placement)),
+          // why: an edit of the checklist alone leaves nothing else to set, and drizzle refuses an empty set
+          updatedAt: new Date(),
+        })
+        .where(and(owned(userId, target), isNull(tasks.deletedAt)))
+        .returning(taskColumns);
+      if (!task) throw new PlannerNotFoundError("Task not found");
+      if (placement?.index !== undefined) {
+        const order = (
+          await tx
+            .select({ id: tasks.id })
+            .from(tasks)
+            .where(inPlace(userId, placement))
+            .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+            .for("update")
+        )
+          .map((row) => row.id)
+          .filter((id) => id !== task.id);
+        order.splice(placement.index, 0, task.id);
+        for (const [position, id] of order.entries())
+          await tx
+            .update(tasks)
+            .set({ position })
+            .where(and(eq(tasks.userId, userId), eq(tasks.id, id)));
+      }
+      if (checklist) {
         await tx
-          .select({ id: tasks.id })
-          .from(tasks)
-          .where(inPlace(userId, placement))
-          .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
-          .for("update")
-      )
-        .map((row) => row.id)
-        .filter((id) => id !== task.id);
-      order.splice(placement.index, 0, task.id);
-      for (const [position, id] of order.entries())
-        await tx
-          .update(tasks)
-          .set({ position })
-          .where(and(eq(tasks.userId, userId), eq(tasks.id, id)));
-    }
-    if (checklist) {
-      await tx.delete(checklistItems).where(eq(checklistItems.taskId, task.id));
-      if (checklist.length)
-        await tx.insert(checklistItems).values(
-          checklist.map((item, position) => ({
-            ...item,
-            taskId: task.id,
-            position,
-          })),
-        );
-    }
-    const { seriesId, occurrence } = task;
-    if (seriesId !== null && occurrence !== null) {
-      if (following || repeat !== undefined)
-        await splitSeries(
-          tx,
-          userId,
-          { ...task, seriesId, occurrence },
-          repeat,
-          { ...fields, checklist },
-        );
-    } else if (repeat) await startSeries(tx, userId, task, repeat);
-    const [read] = await withChecklists(
-      tx,
-      await tx.select(taskColumns).from(tasks).where(owned(userId, target)),
-    );
-    return read;
-  });
+          .delete(checklistItems)
+          .where(eq(checklistItems.taskId, task.id));
+        if (checklist.length)
+          await tx.insert(checklistItems).values(
+            checklist.map((item, position) => ({
+              ...item,
+              taskId: task.id,
+              position,
+            })),
+          );
+      }
+      const { seriesId, occurrence } = task;
+      if (seriesId !== null && occurrence !== null) {
+        if (following || repeat !== undefined)
+          await splitSeries(
+            tx,
+            userId,
+            { ...task, seriesId, occurrence },
+            repeat,
+            { ...fields, checklist },
+          );
+      } else if (repeat) await startSeries(tx, userId, task, repeat);
+      const [read] = await withChecklists(
+        tx,
+        await tx.select(taskColumns).from(tasks).where(owned(userId, target)),
+      );
+      return read;
+    }),
+  );
 }
 
 function moveTo(userId: string, to: TaskPlacement) {
@@ -850,17 +919,19 @@ export async function deleteTask(
   userId: string,
   id: string,
   inScope: Scope = "this",
-): Promise<boolean> {
-  const following = scope.parse(inScope) === "following";
-  return db.transaction(async (tx) => {
-    const target = await materialize(tx, userId, taskId.parse(id));
-    if (!target) return false;
+): Promise<void> {
+  const following = parseInput(scope, inScope) === "following";
+  await db.transaction(async (tx) => {
+    const target = required(
+      await materialize(tx, userId, parseInput(taskId, id)),
+      "Task",
+    );
     const [task] = await tx
       .select({ seriesId: tasks.seriesId, occurrence: tasks.occurrence })
       .from(tasks)
       .where(and(owned(userId, target), isNull(tasks.deletedAt)))
       .for("update");
-    if (!task) return false;
+    if (!task) throw new PlannerNotFoundError("Task not found");
     if (task.seriesId === null)
       await tx.delete(tasks).where(owned(userId, target));
     else if (!following)
@@ -879,15 +950,17 @@ export async function deleteTask(
       await tx.delete(tasks).where(owned(userId, target));
       await release(tx, series.id, task.occurrence!, false);
     }
-    return true;
   });
 }
 
 export async function updateSettings(
   userId: string,
-  input: z.input<typeof settings>,
+  input: unknown,
 ): Promise<void> {
-  await db.update(users).set(settings.parse(input)).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set(parseInput(settings, input))
+    .where(eq(users.id, userId));
 }
 
 async function rollOverUnfinishedTasks(userId: string, today: string) {
@@ -955,9 +1028,6 @@ async function rollOverUnfinishedTasks(userId: string, today: string) {
   });
 }
 
-export class PlannerNotFoundError extends Error {}
-export class PlannerInputError extends Error {}
-
 async function preparePlannerRead(
   userId: string,
   now: Date,
@@ -1002,10 +1072,10 @@ async function listTasksIn(userId: string, id: string): Promise<Task[]> {
 
 export async function queryTasks(
   userId: string,
-  input: z.input<typeof taskQuery>,
+  input: unknown,
   now: Date,
 ): Promise<Task[]> {
-  const query = taskQuery.parse(input);
+  const query = parseInput(taskQuery, input);
   await preparePlannerRead(userId, now);
   const found =
     "listId" in query
@@ -1030,8 +1100,15 @@ export async function getTask(
   userId: string,
   id: string,
   now: Date,
+): Promise<Task> {
+  return required(await findTask(userId, parseInput(taskId, id), now), "Task");
+}
+
+async function findTask(
+  userId: string,
+  ref: string,
+  now: Date,
 ): Promise<Task | null> {
-  const ref = taskId.parse(id);
   await preparePlannerRead(userId, now);
   return snapshot(async (tx) => {
     const [stored] = await tx
@@ -1118,10 +1195,10 @@ async function searchTarget(userId: string, id: string) {
 
 export async function readWeek(
   userId: string,
-  input: z.input<typeof weekQuery>,
+  input: unknown,
   now: Date,
 ): Promise<WeekView> {
-  const { week, focus } = weekQuery.parse(input);
+  const { week, focus } = parseInput(weekQuery, input);
   const { timeZone, weekStartsOn, today } = await preparePlannerRead(
     userId,
     now,

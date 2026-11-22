@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { PlannerInputError, PlannerNotFoundError } from "./planner";
+import {
+  PlannerConflictError,
+  PlannerInputError,
+  PlannerNotFoundError,
+} from "./planner";
 
 const apiErrorCodes = [
   "invalid_request",
@@ -44,25 +48,6 @@ const statuses: Record<ApiErrorCode, number> = {
   internal_error: 500,
 };
 
-function postgresError(
-  error: unknown,
-): { code: string; constraint: string | undefined } | null {
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
-    const { code, constraint } = current as Error & {
-      code?: unknown;
-      constraint?: unknown;
-    };
-    if (typeof code === "string")
-      return {
-        code,
-        constraint: typeof constraint === "string" ? constraint : undefined,
-      };
-    current = current.cause;
-  }
-  return null;
-}
-
 export function apiErrorOf(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof z.ZodError)
@@ -71,15 +56,8 @@ export function apiErrorOf(error: unknown): ApiError {
     return new ApiError("invalid_request", error.message);
   if (error instanceof PlannerNotFoundError)
     return new ApiError("not_found", "Resource not found");
-  const postgres = postgresError(error);
-  // why: only a task pointing at a missing or foreign list becomes 404; other database errors stay 500
-  if (
-    postgres?.code === "23503" &&
-    postgres.constraint === "tasks_user_id_list_id_lists_user_id_id_fk"
-  )
-    return new ApiError("not_found", "Resource not found");
-  if (postgres?.code === "23505")
-    return new ApiError("conflict", "The request conflicts with existing data");
+  if (error instanceof PlannerConflictError)
+    return new ApiError("conflict", error.message);
   return new ApiError("internal_error", "Internal server error");
 }
 

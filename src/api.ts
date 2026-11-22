@@ -13,15 +13,7 @@ import {
   renameList,
   updateTask,
 } from "./planner";
-import {
-  edits,
-  listMove,
-  newList,
-  newTask,
-  placement as placementInput,
-  scopeQuery,
-  taskQuery,
-} from "./planner-schemas";
+import { scopeQuery } from "./planner-schemas";
 
 const prefix = "/api/v1";
 const noStore = { "Cache-Control": "no-store" };
@@ -123,14 +115,10 @@ async function dispatch(request: Request, now: Date): Promise<Response> {
 
   if (segments[0] === "tasks") {
     if (segments.length === 1) {
-      if (method === "GET")
-        return json(await queryTasks(userId, taskQuery.parse(query), now));
+      if (method === "GET") return json(await queryTasks(userId, query, now));
       if (method === "POST") {
         requireEmptyQuery(query);
-        const task = await createTask(
-          userId,
-          newTask.parse(await jsonBody(request)),
-        );
+        const task = await createTask(userId, await jsonBody(request));
         return json(task, 201, { Location: `${prefix}/tasks/${task.id}` });
       }
       methodNotAllowed(["GET", "HEAD", "POST"]);
@@ -140,23 +128,19 @@ async function dispatch(request: Request, now: Date): Promise<Response> {
     if (segments.length === 2) {
       if (method === "GET") {
         requireEmptyQuery(query);
-        const task = await getTask(userId, id, now);
-        if (!task) notFound();
-        return json(task);
+        return json(await getTask(userId, id, now));
       }
       if (method === "PATCH") {
         const task = await updateTask(
           userId,
           id,
-          edits.parse(await jsonBody(request)),
+          await jsonBody(request),
           scopeQuery.parse(query).scope,
         );
-        if (!task) notFound();
         return json(task);
       }
       if (method === "DELETE") {
-        if (!(await deleteTask(userId, id, scopeQuery.parse(query).scope)))
-          notFound();
+        await deleteTask(userId, id, scopeQuery.parse(query).scope);
         return empty();
       }
       methodNotAllowed(["GET", "HEAD", "PATCH", "DELETE"]);
@@ -167,20 +151,16 @@ async function dispatch(request: Request, now: Date): Promise<Response> {
       if (action === "complete" || action === "uncomplete") {
         if (method !== "POST") methodNotAllowed(["POST"]);
         requireEmptyQuery(query);
-        const task = await updateTask(userId, id, {
-          completed: action === "complete",
-        });
-        if (!task) notFound();
-        return json(task);
+        return json(
+          await updateTask(userId, id, { completed: action === "complete" }),
+        );
       }
       if (action === "move") {
         if (method !== "POST") methodNotAllowed(["POST"]);
         requireEmptyQuery(query);
-        const task = await updateTask(userId, id, {
-          placement: placementInput.parse(await jsonBody(request)),
-        });
-        if (!task) notFound();
-        return json(task);
+        return json(
+          await updateTask(userId, id, { placement: await jsonBody(request) }),
+        );
       }
     }
   }
@@ -193,10 +173,7 @@ async function dispatch(request: Request, now: Date): Promise<Response> {
       }
       if (method === "POST") {
         requireEmptyQuery(query);
-        const list = await createList(
-          userId,
-          newList.parse(await jsonBody(request)),
-        );
+        const list = await createList(userId, await jsonBody(request));
         return json(list, 201);
       }
       methodNotAllowed(["GET", "HEAD", "POST"]);
@@ -206,22 +183,11 @@ async function dispatch(request: Request, now: Date): Promise<Response> {
     if (segments.length === 2) {
       if (method === "PATCH") {
         requireEmptyQuery(query);
-        const list = await renameList(
-          userId,
-          id,
-          newList.parse(await jsonBody(request)),
-        );
-        if (!list) notFound();
-        return json(list);
+        return json(await renameList(userId, id, await jsonBody(request)));
       }
       if (method === "DELETE") {
         requireEmptyQuery(query);
-        if (!(await deleteList(userId, id))) {
-          const own = await listLists(userId);
-          if (own.some((list) => list.id === id))
-            throw new ApiError("conflict", "Cannot delete the last list");
-          notFound();
-        }
+        await deleteList(userId, id);
         return empty();
       }
       methodNotAllowed(["PATCH", "DELETE"]);
@@ -230,10 +196,7 @@ async function dispatch(request: Request, now: Date): Promise<Response> {
     if (segments.length === 3 && segments[2] === "move") {
       if (method !== "POST") methodNotAllowed(["POST"]);
       requireEmptyQuery(query);
-      if (
-        !(await moveList(userId, id, listMove.parse(await jsonBody(request))))
-      )
-        notFound();
+      await moveList(userId, id, await jsonBody(request));
       return empty();
     }
   }
