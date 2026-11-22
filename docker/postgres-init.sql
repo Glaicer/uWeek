@@ -1,1 +1,1 @@
-CREATE DATABASE yourweek_test OWNER yourweek;
+CREATE DATABASE uweek_test OWNER uweek;

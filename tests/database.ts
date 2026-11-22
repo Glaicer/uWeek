@@ -1,2 +1,2 @@
 export const testDatabaseUrl =
-  "postgres://yourweek:yourweek@127.0.0.1:5433/yourweek_test";
+  "postgres://uweek:uweek@127.0.0.1:5433/uweek_test";
