@@ -8,6 +8,7 @@ import { auth } from "../src/auth";
 import * as planner from "../src/planner";
 import type { Placement } from "../src/model";
 import type { Scope, Task, TaskEdits, TaskList } from "../src/planner";
+import { requestTime } from "./clock";
 
 export type SignInState =
   | { status: "idle" }
@@ -130,7 +131,11 @@ export async function deleteTask(
 }
 
 export async function listTasks(from: string, to: string): Promise<Task[]> {
-  return planner.listTasks(await currentUserId(), { from, to });
+  return planner.queryTasks(
+    await currentUserId(),
+    { from, to },
+    await requestTime(),
+  );
 }
 
 export async function searchTasks(

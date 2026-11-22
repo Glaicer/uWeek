@@ -9,7 +9,6 @@ import {
   deleteTask,
   getTask,
   listLists,
-  listTasks,
   moveList,
   PlannerNotFoundError,
   queryTasks,
@@ -44,6 +43,11 @@ function weekDates(first: string): string[] {
   );
 }
 
+// why: these cases check the rows the planner stores and schedules, so the clock sits
+// before every fixture here and the rollover has nothing to move
+const readTasks = (userId: string, input: { from: string; to: string }) =>
+  queryTasks(userId, input, new Date("2026-11-09T00:00:00Z"));
+
 test("a user sees only their own tasks and cannot change or delete another user's", async () => {
   const alice = await newUser();
   const bob = await newUser();
@@ -52,13 +56,13 @@ test("a user sees only their own tasks and cannot change or delete another user'
     date: "2026-11-14",
   });
 
-  expect(await listTasks(bob, week)).toEqual([]);
+  expect(await readTasks(bob, week)).toEqual([]);
   expect(
     await updateTask(bob, task.id, { title: "Hacked", completed: true }),
   ).toBeNull();
   expect(await deleteTask(bob, task.id)).toBe(false);
 
-  expect(await listTasks(alice, week)).toEqual([
+  expect(await readTasks(alice, week)).toEqual([
     {
       id: task.id,
       title: "Buy milk",
@@ -88,13 +92,13 @@ test("the owner completes, uncompletes, renames and deletes tasks; a day keeps i
     completed: false,
   });
   await updateTask(user, second.id, { title: "Call dad" });
-  expect((await listTasks(user, week)).map((task) => task.title)).toEqual([
+  expect((await readTasks(user, week)).map((task) => task.title)).toEqual([
     "Gym",
     "Call dad",
   ]);
 
   expect(await deleteTask(user, first.id)).toBe(true);
-  expect((await listTasks(user, week)).map((task) => task.title)).toEqual([
+  expect((await readTasks(user, week)).map((task) => task.title)).toEqual([
     "Call dad",
   ]);
 });
@@ -104,7 +108,7 @@ test("a blank title is rejected", async () => {
   await expect(
     createTask(user, { title: "   ", date: "2026-11-13" }),
   ).rejects.toThrow();
-  expect(await listTasks(user, week)).toEqual([]);
+  expect(await readTasks(user, week)).toEqual([]);
 });
 
 test("an edit that changes nothing is rejected as invalid", async () => {
@@ -186,7 +190,7 @@ test("unfinished tasks from past days roll over to the end of today, in date the
     expect(await titlesOn("2026-11-15")).toEqual(["Tomorrow"]);
   }
   expect(
-    (await listTasks(other, week)).map((task) => [task.title, dayOf(task)]),
+    (await readTasks(other, week)).map((task) => [task.title, dayOf(task)]),
   ).toEqual([["Not mine", "2026-11-10"]]);
 });
 
@@ -358,7 +362,7 @@ test("a user writes a note and picks a color for a task, and finds both with the
       color: "green",
     }),
   ).toMatchObject({ notes: "Legs day\nBring towel", color: "green" });
-  expect((await listTasks(user, week))[0]).toMatchObject({
+  expect((await readTasks(user, week))[0]).toMatchObject({
     notes: "Legs day\nBring towel",
     color: "green",
   });
@@ -380,7 +384,7 @@ test("a task's checklist keeps its items, their marks and their order", async ()
   const [tickets, passport, charger] = ["Tickets", "Passport", "Charger"].map(
     (text) => ({ id: crypto.randomUUID(), text, completed: false }),
   );
-  const checklistOf = async () => (await listTasks(user, week))[0].checklist;
+  const checklistOf = async () => (await readTasks(user, week))[0].checklist;
 
   await updateTask(user, task.id, { checklist: [tickets, passport, charger] });
   expect(await checklistOf()).toEqual([tickets, passport, charger]);
@@ -389,7 +393,7 @@ test("a task's checklist keeps its items, their marks and their order", async ()
   const renamed = { ...charger, text: "Phone charger" };
   await updateTask(user, task.id, { checklist: [renamed, done] });
   expect(await checklistOf()).toEqual([renamed, done]);
-  expect((await listTasks(user, week))[0].title).toBe("Trip");
+  expect((await readTasks(user, week))[0].title).toBe("Trip");
 
   await expect(
     updateTask(user, task.id, {
@@ -417,7 +421,7 @@ test("a user cannot read, change or move another user's task details", async () 
   await expect(
     updateTask(alice, task.id, { placement: { listId: bobs.id } }),
   ).rejects.toThrow();
-  expect(await listTasks(alice, week)).toEqual([
+  expect(await readTasks(alice, week)).toEqual([
     expect.objectContaining({
       date: "2026-11-13",
       notes: "Private",
@@ -434,7 +438,7 @@ test("a task moves to another date or into a list, landing at the end; staying p
   await createTask(user, { title: "Dentist", date: "2026-11-13" });
   await createTask(user, { title: "Haircut", date: "2026-11-10" });
   const titlesOn = async (date: string) =>
-    (await listTasks(user, week))
+    (await readTasks(user, week))
       .filter((task) => dayOf(task) === date)
       .map((task) => task.title);
 
@@ -475,7 +479,7 @@ test("a task made daily falls on every following day of the range, only for its 
     date: "2026-11-12",
     recurrence: { occurrence: "2026-11-12", repeat: daily },
   });
-  const listed = await listTasks(user, week);
+  const listed = await readTasks(user, week);
   expect(placesOf(listed)).toEqual([
     ["2026-11-12", "Stretch", false],
     ["2026-11-13", "Stretch", false],
@@ -485,7 +489,7 @@ test("a task made daily falls on every following day of the range, only for its 
   expect(listed[1]).toMatchObject({
     recurrence: { occurrence: "2026-11-13", repeat: daily },
   });
-  expect(await listTasks(other, week)).toEqual([]);
+  expect(await readTasks(other, week)).toEqual([]);
   expect(await updateTask(other, listed[1].id, { completed: true })).toBeNull();
   expect(await deleteTask(other, listed[1].id)).toBe(false);
 });
@@ -494,7 +498,7 @@ test("an occurrence is completed, renamed and deleted on its own and keeps its i
   const user = await newUser();
   const task = await createTask(user, { title: "Read", date: "2026-11-09" });
   await updateTask(user, task.id, { repeat: daily });
-  const [, tue, wed, thu] = await listTasks(user, week);
+  const [, tue, wed, thu] = await readTasks(user, week);
 
   expect(await updateTask(user, tue.id, { completed: true })).toMatchObject({
     id: tue.id,
@@ -504,7 +508,7 @@ test("an occurrence is completed, renamed and deleted on its own and keeps its i
   await updateTask(user, wed.id, { title: "Read a chapter" });
   expect(await deleteTask(user, thu.id)).toBe(true);
 
-  const listed = await listTasks(user, week);
+  const listed = await readTasks(user, week);
   expect(placesOf(listed)).toEqual([
     ["2026-11-09", "Read", false],
     ["2026-11-10", "Read", true],
@@ -520,7 +524,7 @@ test("this and following ends the old series the day before and starts a new one
   const user = await newUser();
   const task = await createTask(user, { title: "Run", date: "2026-11-09" });
   await updateTask(user, task.id, { repeat: daily });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
   await updateTask(user, before[5].id, { completed: true });
 
   await updateTask(
@@ -529,7 +533,7 @@ test("this and following ends the old series the day before and starts a new one
     { title: "Run 5k", color: "green" },
     "following",
   );
-  const after = await listTasks(user, week);
+  const after = await readTasks(user, week);
   expect(placesOf(after)).toEqual([
     ["2026-11-09", "Run", false],
     ["2026-11-10", "Run", false],
@@ -544,7 +548,7 @@ test("this and following ends the old series the day before and starts a new one
   expect(after[6].recurrence?.seriesId).not.toBe(after[2].recurrence?.seriesId);
 
   expect(await deleteTask(user, after[3].id, "following")).toBe(true);
-  expect(placesOf(await listTasks(user, week))).toEqual([
+  expect(placesOf(await readTasks(user, week))).toEqual([
     ["2026-11-09", "Run", false],
     ["2026-11-10", "Run", false],
     ["2026-11-11", "Run", false],
@@ -559,7 +563,7 @@ const checklistItems = (...items: string[]) =>
   items.map((text) => ({ id: crypto.randomUUID(), text, completed: false }));
 
 const weekChecklists = async (user: string) =>
-  (await listTasks(user, week)).map(checklistTexts);
+  (await readTasks(user, week)).map(checklistTexts);
 
 test("this and following with a new checklist gives the following occurrences its texts and order and keeps the mark of an item whose text stayed", async () => {
   const user = await newUser();
@@ -568,7 +572,7 @@ test("this and following with a new checklist gives the following occurrences it
     repeat: daily,
     checklist: checklistItems("Tickets", "Passport"),
   });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
 
   const [tickets, passport] = before[2].checklist;
   await updateTask(user, before[2].id, {
@@ -612,7 +616,7 @@ test("a checklist edit of one occurrence alone leaves the following occurrences 
     repeat: daily,
     checklist: checklistItems("Tickets", "Passport"),
   });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
 
   await updateTask(user, before[2].id, {
     checklist: [{ ...before[2].checklist[0], text: "Tickets and passport" }],
@@ -637,12 +641,12 @@ test("changing the rule from an occurrence repeats from that day on the new rule
   const user = await newUser();
   const task = await createTask(user, { title: "Gym", date: "2026-11-09" });
   await updateTask(user, task.id, { repeat: daily });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
 
   await updateTask(user, before[2].id, {
     repeat: { every: "week", interval: 1, weekdays: [3, 5], until: null },
   });
-  expect(placesOf(await listTasks(user, week))).toEqual([
+  expect(placesOf(await readTasks(user, week))).toEqual([
     ["2026-11-09", "Gym", false],
     ["2026-11-10", "Gym", false],
     ["2026-11-11", "Gym", false],
@@ -650,7 +654,7 @@ test("changing the rule from an occurrence repeats from that day on the new rule
   ]);
 
   await updateTask(user, before[0].id, { repeat: null });
-  const plain = await listTasks(user, week);
+  const plain = await readTasks(user, week);
   expect(placesOf(plain)).toEqual([
     ["2026-11-09", "Gym", false],
     ["2026-11-11", "Gym", false],
@@ -663,11 +667,11 @@ test("deleting this and following leaves the days before and keeps completed occ
   const user = await newUser();
   const task = await createTask(user, { title: "Walk", date: "2026-11-09" });
   await updateTask(user, task.id, { repeat: daily });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
   await updateTask(user, before[5].id, { completed: true });
 
   expect(await deleteTask(user, before[2].id, "following")).toBe(true);
-  const after = await listTasks(user, week);
+  const after = await readTasks(user, week);
   expect(placesOf(after)).toEqual([
     ["2026-11-09", "Walk", false],
     ["2026-11-10", "Walk", false],
@@ -675,7 +679,7 @@ test("deleting this and following leaves the days before and keeps completed occ
   ]);
   expect(after[2].recurrence).toBeUndefined();
   expect(
-    await listTasks(user, { from: "2026-11-16", to: "2026-11-22" }),
+    await readTasks(user, { from: "2026-11-16", to: "2026-11-22" }),
   ).toEqual([]);
 });
 
@@ -686,7 +690,7 @@ test("a monthly series on the 31st can move to the 1st of the next month", async
     repeat: { every: "month", interval: 1, monthEnd: "overflow", until: null },
   });
   expect(
-    (await listTasks(user, { from: "2027-02-01", to: "2027-03-31" })).map(
+    (await readTasks(user, { from: "2027-02-01", to: "2027-03-31" })).map(
       dayOf,
     ),
   ).toEqual(["2027-03-01", "2027-03-31"]);
@@ -704,7 +708,7 @@ test("missed occurrences of past days roll over to today and remember their day;
   await updateSettings(user, { timeZone: "Europe/Moscow" });
   const task = await createTask(user, { title: "Water", date: "2026-11-10" });
   await updateTask(user, task.id, { repeat: daily });
-  const [, wed] = await listTasks(user, week);
+  const [, wed] = await readTasks(user, week);
   await updateTask(user, wed.id, { completed: true });
   const now = new Date("2026-11-13T10:00:00+03:00");
 
@@ -734,10 +738,10 @@ test("an occurrence moved to another day or a list stays there and the series do
   await updateTask(user, task.id, {
     repeat: { every: "week", interval: 1, weekdays: [1, 3], until: null },
   });
-  const [, wed] = await listTasks(user, week);
+  const [, wed] = await readTasks(user, week);
 
   await updateTask(user, wed.id, { placement: { date: "2026-11-14" } });
-  expect(placesOf(await listTasks(user, week))).toEqual([
+  expect(placesOf(await readTasks(user, week))).toEqual([
     ["2026-11-09", "Plants", false],
     ["2026-11-14", "Plants", false],
   ]);
@@ -780,7 +784,7 @@ test("queryTasks filters stored and virtual tasks by placement status and litera
     date: "2026-11-20",
   });
   await updateTask(user, series.id, { repeat: daily });
-  const [, saturday] = await listTasks(user, {
+  const [, saturday] = await readTasks(user, {
     from: "2026-11-20",
     to: "2026-11-21",
   });
@@ -1000,14 +1004,14 @@ test("deleting this and following removes an unfinished occurrence moved off its
     date: "2026-11-09",
   });
   await updateTask(user, task.id, { repeat: daily });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
 
   await updateTask(user, before[2].id, {
     placement: { date: "2026-11-20" },
   });
   expect(await deleteTask(user, before[1].id, "following")).toBe(true);
   expect(
-    placesOf(await listTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
+    placesOf(await readTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
   ).toEqual([["2026-11-09", "Walk", false]]);
 });
 
@@ -1018,7 +1022,7 @@ test("changing the rule deletes materialized unfinished occurrences after the sp
     date: "2026-11-09",
   });
   await updateTask(user, task.id, { repeat: daily });
-  const before = await listTasks(user, week);
+  const before = await readTasks(user, week);
   await updateTask(user, before[2].id, { completed: true });
   await updateTask(user, before[2].id, { completed: false });
 
@@ -1031,7 +1035,7 @@ test("changing the rule deletes materialized unfinished occurrences after the sp
     "following",
   );
   expect(
-    placesOf(await listTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
+    placesOf(await readTasks(user, { from: "2026-11-09", to: "2026-11-30" })),
   ).toEqual([
     ["2026-11-09", "Gym", false],
     ["2026-11-10", "Gym", false],

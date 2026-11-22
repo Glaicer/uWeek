@@ -5,7 +5,7 @@ import {
   createList,
   createTask,
   deleteTask,
-  listTasks,
+  queryTasks,
   readWeek,
   searchTasks,
   updateSettings,
@@ -108,7 +108,13 @@ test("a series is searched by its template once, not by its stored or changed oc
     notes: "Orchid routine",
     repeat: { every: "day", interval: 1, until: null },
   });
-  const dates = await listTasks(user, { from: "2026-11-09", to: "2026-11-15" });
+  // why: the read is here for the stored occurrences, so the clock sits before them
+  // and the rollover has nothing to move
+  const dates = await queryTasks(
+    user,
+    { from: "2026-11-09", to: "2026-11-15" },
+    new Date("2026-11-09T00:00:00Z"),
+  );
   await updateTask(user, dates[1].id, { completed: true });
   await updateTask(user, dates[2].id, { title: "Changed exception" });
   const result = await searchTasks(user, { query: "ORCHID" });
