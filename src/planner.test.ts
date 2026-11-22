@@ -552,6 +552,87 @@ test("this and following ends the old series the day before and starts a new one
   ]);
 });
 
+const checklistTexts = (task: Task) =>
+  task.checklist.map(({ text, completed }) => [text, completed]);
+
+const checklistItems = (...items: string[]) =>
+  items.map((text) => ({ id: crypto.randomUUID(), text, completed: false }));
+
+const weekChecklists = async (user: string) =>
+  (await listTasks(user, week)).map(checklistTexts);
+
+test("this and following with a new checklist gives the following occurrences its texts and order and keeps the mark of an item whose text stayed", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Trip", date: "2026-11-09" });
+  await updateTask(user, task.id, {
+    repeat: daily,
+    checklist: checklistItems("Tickets", "Passport"),
+  });
+  const before = await listTasks(user, week);
+
+  const [tickets, passport] = before[2].checklist;
+  await updateTask(user, before[2].id, {
+    checklist: [tickets, { ...passport, completed: true }],
+  });
+  const [ticketsAt, passportAt] = before[1].checklist;
+  await updateTask(
+    user,
+    before[1].id,
+    { checklist: [passportAt, ticketsAt, ...checklistItems("Charger")] },
+    "following",
+  );
+
+  const kept = [
+    ["Passport", false],
+    ["Tickets", false],
+    ["Charger", false],
+  ];
+  expect(await weekChecklists(user)).toEqual([
+    [
+      ["Tickets", false],
+      ["Passport", false],
+    ],
+    kept,
+    [
+      ["Passport", true],
+      ["Tickets", false],
+      ["Charger", false],
+    ],
+    kept,
+    kept,
+    kept,
+    kept,
+  ]);
+});
+
+test("a checklist edit of one occurrence alone leaves the following occurrences as they were", async () => {
+  const user = await newUser();
+  const task = await createTask(user, { title: "Trip", date: "2026-11-09" });
+  await updateTask(user, task.id, {
+    repeat: daily,
+    checklist: checklistItems("Tickets", "Passport"),
+  });
+  const before = await listTasks(user, week);
+
+  await updateTask(user, before[2].id, {
+    checklist: [{ ...before[2].checklist[0], text: "Tickets and passport" }],
+  });
+
+  const kept = [
+    ["Tickets", false],
+    ["Passport", false],
+  ];
+  expect(await weekChecklists(user)).toEqual([
+    kept,
+    kept,
+    [["Tickets and passport", false]],
+    kept,
+    kept,
+    kept,
+    kept,
+  ]);
+});
+
 test("changing the rule from an occurrence repeats from that day on the new rule; stopping it ends only that series", async () => {
   const user = await newUser();
   const task = await createTask(user, { title: "Gym", date: "2026-11-09" });

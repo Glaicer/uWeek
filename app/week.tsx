@@ -25,19 +25,21 @@ import {
   type WeekStart,
 } from "../src/calendar";
 import { taskColorValues, type Placement, type TaskColor } from "../src/model";
-import type {
-  ChecklistItem,
-  Scope,
-  Task,
-  TaskEdits,
-  TaskList,
-} from "../src/planner";
+import type { ChecklistItem, Scope, Task, TaskList } from "../src/planner";
 import {
   monthEndChoice,
   type MonthEnd,
   type Repeat,
   type Weekday,
 } from "../src/recurrence";
+import {
+  changesOf,
+  monthEndOptions,
+  placeOf,
+  placed,
+  startRepeat,
+  type TaskDetails,
+} from "../src/task-edits";
 import {
   createList,
   createTask,
@@ -213,8 +215,6 @@ interface Draft {
   failed: boolean;
 }
 
-const placeOf = (placement: Placement) => placement.date ?? placement.listId;
-
 // why: a task holds exactly one placement key, so a move rebuilds it rather than blanking the old key
 const movedTo = (task: Task, placement: Placement): Task => {
   const { id, title, completed, notes, color, checklist, recurrence } = task;
@@ -223,18 +223,6 @@ const movedTo = (task: Task, placement: Placement): Task => {
     ? { ...fields, date: placement.date }
     : { ...fields, listId: placement.listId };
 };
-
-function placed(tasks: Task[], moved: Task, index: number): Task[] {
-  const rest = tasks.filter((task) => task.id !== moved.id);
-  const place = rest.filter((task) => placeOf(task) === placeOf(moved));
-  const at =
-    index < place.length
-      ? rest.indexOf(place[index])
-      : place.length
-        ? rest.indexOf(place[place.length - 1]) + 1
-        : rest.length;
-  return [...rest.slice(0, at), moved, ...rest.slice(at)];
-}
 
 function NewTask({
   onSave,
@@ -1220,15 +1208,6 @@ function ListTabs({
   );
 }
 
-interface Details {
-  title: string;
-  notes: string;
-  color: TaskColor | null;
-  checklist: ChecklistItem[];
-  placement: Placement;
-  repeat: Repeat | null;
-}
-
 const fullWeekday = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
 const frequencies = [
   { value: "never", label: "Never" },
@@ -1238,62 +1217,6 @@ const frequencies = [
   { value: "year", label: "Yearly" },
 ] as const;
 type Frequency = (typeof frequencies)[number]["value"];
-
-function ordinal(day: number): string {
-  const tens = day % 100;
-  const suffix =
-    tens >= 11 && tens <= 13
-      ? "th"
-      : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th");
-  return `${day}${suffix}`;
-}
-
-function monthEndOptions(date: string): { value: MonthEnd; label: string }[] {
-  const choice = monthEndChoice(date);
-  if (choice === "31st")
-    return [
-      { value: "last", label: "Last day of shorter months" },
-      { value: "overflow", label: "1st of the next month" },
-    ];
-  if (choice === "last day")
-    return [
-      { value: "clamp", label: `The ${ordinal(Number(date.slice(8)))}` },
-      { value: "last", label: "The last day of the month" },
-    ];
-  return [];
-}
-
-function repeatOn(repeat: Repeat, date: string): Repeat {
-  if (repeat.every !== "month") return repeat;
-  const options = monthEndOptions(date).map((option) => option.value);
-  if (options.includes(repeat.monthEnd)) return repeat;
-  return { ...repeat, monthEnd: options[0] ?? "clamp" };
-}
-
-function startRepeat(
-  every: Repeat["every"],
-  date: string,
-  from: Repeat | null,
-): Repeat {
-  const base = { interval: from?.interval ?? 1, until: from?.until ?? null };
-  if (every === "week")
-    return { ...base, every, weekdays: [localDate(date).getDay() as Weekday] };
-  if (every === "month")
-    return repeatOn({ ...base, every, monthEnd: "clamp" }, date);
-  return { ...base, every };
-}
-
-function sameRepeat(a: Repeat | null, b: Repeat | null): boolean {
-  if (!a || !b) return a === b;
-  return (
-    a.every === b.every &&
-    a.interval === b.interval &&
-    a.until === b.until &&
-    (a.every !== "week" ||
-      (b.every === "week" && a.weekdays.join() === b.weekdays.join())) &&
-    (a.every !== "month" || (b.every === "month" && a.monthEnd === b.monthEnd))
-  );
-}
 
 function RepeatField({
   date,
@@ -1409,31 +1332,6 @@ function RepeatField({
   );
 }
 
-function changesOf(task: Task, details: Details): TaskEdits | null {
-  const edits: TaskEdits = {};
-  const title = details.title.trim();
-  if (title && title !== task.title) edits.title = title;
-  if (details.notes !== task.notes) edits.notes = details.notes;
-  if (details.color !== task.color) edits.color = details.color;
-  const checklist = details.checklist
-    .map((item) => ({ ...item, text: item.text.trim() }))
-    .filter((item) => item.text);
-  if (JSON.stringify(checklist) !== JSON.stringify(task.checklist))
-    edits.checklist = checklist;
-  if (placeOf(details.placement) !== placeOf(task))
-    edits.placement = details.placement;
-  const date = details.placement.date;
-  if (
-    date !== undefined &&
-    details.repeat !== (task.recurrence?.repeat ?? null)
-  ) {
-    const repeat = details.repeat && repeatOn(details.repeat, date);
-    if (!sameRepeat(repeat, task.recurrence?.repeat ?? null))
-      edits.repeat = repeat;
-  }
-  return Object.keys(edits).length ? edits : null;
-}
-
 function TaskCard({
   task,
   lists,
@@ -1457,7 +1355,7 @@ function TaskCard({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const placeList = useRef<HTMLDivElement>(null);
-  const [details, setDetails] = useState<Details>(() => ({
+  const [details, setDetails] = useState<TaskDetails>(() => ({
     title: task.title,
     notes: task.notes,
     color: task.color,
@@ -1469,7 +1367,7 @@ function TaskCard({
   const [busy, setBusy] = useState(false);
   const { save, alert } = useSave();
   const dirty = newItem.trim() !== "" || changesOf(task, details) !== null;
-  const withNewItem = (): Details =>
+  const withNewItem = (): TaskDetails =>
     newItem.trim()
       ? {
           ...details,
@@ -1488,7 +1386,7 @@ function TaskCard({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
-  const set = (change: Partial<Details>) =>
+  const set = (change: Partial<TaskDetails>) =>
     setDetails((details) => ({ ...details, ...change }));
   const setItems = (change: (items: ChecklistItem[]) => ChecklistItem[]) =>
     setDetails((details) => ({
@@ -1521,13 +1419,11 @@ function TaskCard({
   }
 
   async function close() {
-    const edits = changesOf(task, withNewItem());
-    if (!edits) return finish();
-    const template = (["title", "notes", "color", "checklist"] as const).some(
-      (field) => edits[field] !== undefined,
-    );
+    const change = changesOf(task, withNewItem());
+    if (!change) return finish();
+    const { edits } = change;
     const scope =
-      task.recurrence && edits.repeat === undefined && template
+      task.recurrence && edits.repeat === undefined && change.seriesChanged
         ? await askScope("Change", task.title)
         : "this";
     if (!scope) return;

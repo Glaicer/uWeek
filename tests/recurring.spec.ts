@@ -164,6 +164,37 @@ test("one occurrence is deleted on its own; a missed one moves to today and says
   await expect(task(page, "13 Fri", "Water plants")).toBeVisible();
 });
 
+test("marking a checklist item of one occurrence saves it without asking about the series", async ({
+  page,
+}) => {
+  await addTask(page, "10 Tue", "Trip");
+  let details = await open(page, "10 Tue", "Trip");
+  await choose(page, "Repeat", "Daily");
+  const newItem = details.getByRole("textbox", { name: "New item" });
+  await newItem.fill("Tickets");
+  await newItem.press("Enter");
+  await details.getByRole("button", { name: "Done" }).click();
+  await expect(details).toHaveCount(0);
+
+  details = await open(page, "11 Wed", "Trip");
+  await details.getByRole("checkbox", { name: "Tickets" }).check();
+  await details.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("dialog", { name: /^Change/ })).toHaveCount(0);
+  await expect(details).toHaveCount(0);
+
+  await page.reload();
+  details = await open(page, "11 Wed", "Trip");
+  await expect(
+    details.getByRole("checkbox", { name: "Tickets" }),
+  ).toBeChecked();
+  await page.keyboard.press("Escape");
+  await expect(details).toHaveCount(0);
+  details = await open(page, "12 Thu", "Trip");
+  await expect(
+    details.getByRole("checkbox", { name: "Tickets" }),
+  ).not.toBeChecked();
+});
+
 test("a monthly task on the last day of a 30-day month asks whether to keep the 30th or follow the month's end", async ({
   page,
 }) => {
