@@ -46,9 +46,11 @@ test("search opens from the header, finds a future task and highlights it on its
     fullPage: true,
   });
   await page.setViewportSize({ width: 360, height: 800 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
-    360,
-  );
+  const widths = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   await page.screenshot({
     path: ".scratch/uweek-cloud/issues/09-screenshots/search-360.png",
     fullPage: true,
