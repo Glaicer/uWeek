@@ -215,6 +215,15 @@ interface Draft {
 
 const placeOf = (placement: Placement) => placement.date ?? placement.listId;
 
+// why: a task holds exactly one placement key, so a move rebuilds it rather than blanking the old key
+const movedTo = (task: Task, placement: Placement): Task => {
+  const { id, title, completed, notes, color, checklist, recurrence } = task;
+  const fields = { id, title, completed, notes, color, checklist, recurrence };
+  return placement.date !== undefined
+    ? { ...fields, date: placement.date }
+    : { ...fields, listId: placement.listId };
+};
+
 function placed(tasks: Task[], moved: Task, index: number): Task[] {
   const rest = tasks.filter((task) => task.id !== moved.id);
   const place = rest.filter((task) => placeOf(task) === placeOf(moved));
@@ -1845,13 +1854,7 @@ export function Week({
     const home = tasks
       .filter((other) => placeOf(other) === placeOf(task))
       .indexOf(task);
-    setTasks((tasks) =>
-      placed(
-        tasks,
-        { ...task, date: undefined, listId: undefined, ...placement },
-        index,
-      ),
-    );
+    setTasks((tasks) => placed(tasks, movedTo(task, placement), index));
     save(async () => {
       try {
         await updateTask(task.id, { placement: { ...placement, index } });
