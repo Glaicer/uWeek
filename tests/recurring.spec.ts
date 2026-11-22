@@ -164,6 +164,31 @@ test("one occurrence is deleted on its own; a missed one moves to today and says
   await expect(task(page, "13 Fri", "Water plants")).toBeVisible();
 });
 
+test("a week left open past midnight rolls over when a series edit reloads it", async ({
+  page,
+}) => {
+  await addTask(page, "09 Today", "Unfinished");
+  await addTask(page, "10 Tue", "Stretch");
+  let details = await open(page, "10 Tue", "Stretch");
+  await choose(page, "Repeat", "Daily");
+  await details.getByRole("button", { name: "Done" }).click();
+  await expect(details).toHaveCount(0);
+
+  await pinServerClock(page.context(), "2026-11-10T08:00:00+03:00");
+  details = await open(page, "13 Fri", "Stretch");
+  await details.getByRole("textbox", { name: "Title" }).fill("Stretch 10 min");
+  await details.getByRole("button", { name: "Done" }).click();
+  await page
+    .getByRole("dialog", { name: /^Change “Stretch”/ })
+    .getByRole("button", { name: "This and following" })
+    .click();
+  await expect(details).toHaveCount(0);
+
+  await expect(task(page, "10 Tue", "Unfinished")).toBeVisible();
+  await expect(task(page, "09 Today", "Unfinished")).toHaveCount(0);
+  await expect(task(page, "15 Sun", "Stretch 10 min")).toBeVisible();
+});
+
 test("a monthly task on the last day of a 30-day month asks whether to keep the 30th or follow the month's end", async ({
   page,
 }) => {

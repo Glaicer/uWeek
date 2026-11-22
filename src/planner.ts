@@ -378,7 +378,7 @@ const snapshot = <T>(read: (tx: Transaction) => Promise<T>) =>
     accessMode: "read only",
   });
 
-export async function listTasks(
+async function listTasks(
   userId: string,
   input: z.input<typeof range>,
 ): Promise<Task[]> {
