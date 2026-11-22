@@ -1,6 +1,6 @@
 "use server";
 
-import { APIError } from "better-auth/api";
+import { APIError, isAPIError } from "better-auth/api";
 import { refresh } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -21,7 +21,7 @@ export async function requestSignInLink(
   const email = String(form.get("email") ?? "").trim();
   try {
     await auth.api.signInMagicLink({
-      body: { email, callbackURL: "/", errorCallbackURL: "/sign-in" },
+      body: { email },
       headers: await headers(),
     });
   } catch (error) {
@@ -53,6 +53,22 @@ export async function signInWithGoogle(): Promise<void> {
   });
   if (!url) throw new Error("Google sign-in returned no URL");
   redirect(url);
+}
+
+export async function confirmSignIn(form: FormData): Promise<void> {
+  const token = String(form.get("token") ?? "");
+  try {
+    await auth.api.magicLinkVerify({
+      query: { token },
+      headers: await headers(),
+    });
+  } catch (error) {
+    // why: the plugin reports both success and failure as a 302 APIError; a successful call without callbackURL returns the session JSON instead
+    if (isAPIError(error) && error.status === "FOUND")
+      redirect("/sign-in?error=INVALID_TOKEN");
+    throw error;
+  }
+  redirect("/");
 }
 
 export async function signOut(): Promise<void> {
