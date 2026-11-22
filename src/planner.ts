@@ -23,6 +23,7 @@ import { db } from "./db/client";
 import { checklistItems, lists, tasks, taskSeries, users } from "./db/schema";
 import { type Placement, type TaskColor } from "./model";
 import { occurrences, type Repeat, type Series } from "./recurrence";
+import type { SeriesField } from "./task-edits";
 import {
   edits,
   listId,
@@ -681,6 +682,48 @@ async function startSeries(
     .where(owned(userId, task.id));
 }
 
+type SeriesEdits = Partial<Pick<TaskRecord, SeriesField>>;
+
+type SeriesColumns = Exclude<SeriesField, "checklist">;
+
+async function replaceChecklists(
+  tx: Transaction,
+  taskIds: string[],
+  checklist: readonly { text: string }[],
+) {
+  if (!taskIds.length) return;
+  // why: an item whose text stayed keeps its mark, and the rest come undone
+  const marks = new Map<string, Map<string, boolean[]>>();
+  const items = await tx
+    .select({
+      taskId: checklistItems.taskId,
+      text: checklistItems.text,
+      completed: checklistItems.completed,
+    })
+    .from(checklistItems)
+    .where(inArray(checklistItems.taskId, taskIds));
+  for (const { taskId, text, completed } of items) {
+    const byText = marks.get(taskId) ?? new Map<string, boolean[]>();
+    const queue = byText.get(text);
+    if (queue) queue.push(completed);
+    else byText.set(text, [completed]);
+    marks.set(taskId, byText);
+  }
+  await tx
+    .delete(checklistItems)
+    .where(inArray(checklistItems.taskId, taskIds));
+  const rows = taskIds.flatMap((taskId) =>
+    checklist.map((item, position) => ({
+      id: crypto.randomUUID(),
+      taskId,
+      text: item.text,
+      completed: marks.get(taskId)?.get(item.text)?.shift() ?? false,
+      position,
+    })),
+  );
+  if (rows.length) await tx.insert(checklistItems).values(rows);
+}
+
 async function splitSeries(
   tx: Transaction,
   userId: string,
@@ -689,7 +732,7 @@ async function splitSeries(
     occurrence: string;
   },
   repeat: Repeat | null | undefined,
-  fields: Partial<Pick<TaskRecord, "title" | "notes" | "color">>,
+  fields: SeriesEdits,
 ) {
   const at = task.occurrence;
   const [old] = await tx
@@ -721,11 +764,23 @@ async function splitSeries(
     .update(tasks)
     .set({ seriesId: id })
     .where(fromOccurrence(old.id, at, true));
-  if (Object.values(fields).some((field) => field !== undefined))
-    await tx
-      .update(tasks)
-      .set(fields)
-      .where(fromOccurrence(id, at, false));
+  const following = fromOccurrence(id, at, false);
+  // why: every column is spelled out here, so a new series field fails to compile until it is spread too
+  const columns: { [Field in SeriesColumns]: TaskRecord[Field] | undefined } = {
+    title: fields.title,
+    notes: fields.notes,
+    color: fields.color,
+  };
+  if (Object.values(columns).some((value) => value !== undefined))
+    await tx.update(tasks).set(columns).where(following);
+  if (fields.checklist !== undefined)
+    await replaceChecklists(
+      tx,
+      (await tx.select({ id: tasks.id }).from(tasks).where(following)).map(
+        (row) => row.id,
+      ),
+      fields.checklist,
+    );
 }
 
 export async function updateTask(
@@ -790,7 +845,7 @@ export async function updateTask(
           userId,
           { ...task, seriesId, occurrence },
           repeat,
-          fields,
+          { ...fields, checklist },
         );
     } else if (repeat) await startSeries(tx, userId, task, repeat);
     const [read] = await withChecklists(
