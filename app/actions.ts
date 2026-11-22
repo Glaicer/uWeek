@@ -63,10 +63,15 @@ export async function confirmSignIn(form: FormData): Promise<void> {
       headers: await headers(),
     });
   } catch (error) {
-    // why: the plugin reports both success and failure as a 302 APIError; a successful call without callbackURL returns the session JSON instead
-    if (isAPIError(error) && error.status === "FOUND")
-      redirect("/sign-in?error=INVALID_TOKEN");
-    throw error;
+    // why: without callbackURL the plugin returns the session on success and throws a 302 APIError whose location carries ?error=<code> on failure
+    if (!isAPIError(error) || error.status !== "FOUND") throw error;
+    const location = new Headers(error.headers).get("location") ?? "";
+    const code = new URL(location, "http://localhost").searchParams.get(
+      "error",
+    );
+    if (code !== "INVALID_TOKEN")
+      console.error("Sign-in link verification failed:", code);
+    redirect("/sign-in?error=INVALID_TOKEN");
   }
   redirect("/");
 }

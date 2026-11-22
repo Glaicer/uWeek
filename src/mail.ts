@@ -45,7 +45,7 @@ export function sendSignInLink(
   url: string,
   minutes: number,
 ): Promise<void> {
-  const notice = `Press Sign in on the page to finish. The link works once and expires in ${minutes} minutes. If you did not ask for it, ignore this email.`;
+  const notice = `The link works once and expires in ${minutes} minutes. If you did not ask for it, ignore this email.`;
   return send({
     to: email,
     subject: "Sign in to uWeek",
