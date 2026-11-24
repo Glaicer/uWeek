@@ -1,8 +1,7 @@
 export function validCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
+  const date = utcDate(value);
   return (
     year > 0 &&
     date.getUTCFullYear() === year &&
@@ -11,26 +10,70 @@ export function validCalendarDate(value: string): boolean {
   );
 }
 
-export function calendarDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+export function localDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
 }
 
-export function currentWeek(today: Date, weekStartsOn: 0 | 1 = 1): Date[] {
-  const monday = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
+export type WeekStart = 0 | 1;
+
+function utcDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
+
+export function addDays(value: string, days: number): string {
+  const date = utcDate(value);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export function weekOf(value: string, weekStartsOn: WeekStart): string[] {
+  const first = addDays(
+    value,
+    -((utcDate(value).getUTCDay() - weekStartsOn + 7) % 7),
   );
-  monday.setDate(monday.getDate() - ((monday.getDay() - weekStartsOn + 7) % 7));
-  return Array.from(
-    { length: 7 },
-    (_, offset) =>
-      new Date(
-        monday.getFullYear(),
-        monday.getMonth(),
-        monday.getDate() + offset,
-      ),
+  return Array.from({ length: 7 }, (_, offset) => addDays(first, offset));
+}
+
+export function monthWeeks(
+  year: number,
+  month: number,
+  weekStartsOn: WeekStart,
+): string[][] {
+  const first = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-01`;
+  const last = addDays(addDays(first, 31).slice(0, 8) + "01", -1);
+  const weeks = [weekOf(first, weekStartsOn)];
+  while (weeks.at(-1)![6] < last)
+    weeks.push(weekOf(addDays(weeks.at(-1)![0], 7), weekStartsOn));
+  return weeks;
+}
+
+// why: Monday weeks follow ISO 8601; Sunday weeks follow the US rule, where the week holding 1 January is week 1
+export function weekNumber(week: string[]): number {
+  if (utcDate(week[0]).getUTCDay() !== 0)
+    return isoWeek(
+      localDate(week.find((day) => utcDate(day).getUTCDay() === 4)!),
+    );
+  const firstWeek = weekOf(`${week[6].slice(0, 4)}-01-01`, 0)[0];
+  return (
+    (utcDate(week[0]).getTime() - utcDate(firstWeek).getTime()) /
+      (7 * 86_400_000) +
+    1
   );
+}
+
+export function todayIn(timeZone: string, now: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 export function formatDate(date: Date): string {
@@ -41,4 +84,17 @@ export function formatDate(date: Date): string {
   })
     .format(date)
     .replace(" г.", "");
+}
+
+function isoWeek(date: Date): number {
+  const thursday = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 3 - ((date.getDay() + 6) % 7),
+  );
+  const dayOfYear =
+    (Date.UTC(thursday.getFullYear(), thursday.getMonth(), thursday.getDate()) -
+      Date.UTC(thursday.getFullYear(), 0, 1)) /
+    86_400_000;
+  return Math.floor(dayOfYear / 7) + 1;
 }

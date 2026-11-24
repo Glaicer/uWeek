@@ -1,78 +1,47 @@
-# YourWeek
+# uWeek
 
-Личный недельный планер без регистрации и облачной синхронизации: задачи, списки «Когда-нибудь», заметки, чек-листы, цвета, поиск, CSV-импорт и полная JSON-копия. Данные сохраняются в IndexedDB и доступны офлайн после загрузки оболочки.
+A weekly planner laid out like an open diary. The whole week fits on one spread: the first four days on the left page, the other three and your undated lists on the right. To add a task, click an empty line under the day and start typing.
 
-## Запуск
+uWeek runs in the browser at [uweek.top](https://uweek.top) and works online only.
 
-Нужны Node.js 24+ и pnpm 12.3.4.
+## Signing in
 
-```sh
-pnpm install --frozen-lockfile
-pnpm dev
-```
+Enter your email and open the link we send you; there is no password. You can also continue with Google: with the same email you land in the same account. Your tasks are visible to you alone.
 
-Откройте адрес localhost, показанный Vite. Enter или «Добавить» сохраняет задачу, Escape отменяет ввод. Пустой ввод ничего не создаёт.
+## The week
 
-Для самостоятельного статического размещения:
+- Enter saves the task and opens the next line; Escape cancels.
+- Click a task's title to mark it done, click again to undo.
+- The arrows in the header page through weeks, Today brings you back, and Go to week opens a calendar to jump anywhere.
+- The week starts on Monday or Sunday; switch it in the ⋯ menu.
+- Unfinished tasks from past days move to today by themselves. "Today" follows your time zone.
 
-```sh
-pnpm build
-pnpm preview
-```
+## Someday
 
-`dist/` содержит только статические файлы; отдавайте их с HTTPS или localhost. Preview предназначен для локальной проверки, не для production. `file://` не поддерживается. Не требуются API или серверная база.
+Tasks without a date live in Someday lists at the end of the spread. You start with one list, Inbox. The "+" adds a list, and the Edit lists gear lets you rename or delete one. Drag lists to reorder them.
 
-Размещайте **только содержимое `dist/`**, не весь checkout: `docs/` может содержать личные исходные файлы. Стандартная сборка рассчитана на корень сайта; сохраните структуру `assets/` и доступность `sw.js` рядом с `index.html`. Для обновления заменяйте весь набор файлов одной сборки и не кэшируйте `sw.js` надолго на сервере. Подкаталог сайта пока не проверен. Сохраняйте стабильный HTTPS-адрес (или localhost с постоянным портом), иначе потребуется JSON-перенос данных.
+## Task card
 
-## Офлайн-работа
+The pencil next to a task opens its card: notes, a checklist, a color, and a move to another date or list. You can also move tasks with the mouse: drag one to another day, into a list, or up and down within a day.
 
-Офлайн-оболочка создаётся только при `pnpm build`, не в режиме dev. Первый запуск требует сети: дождитесь «Готово к работе офлайн» — это подтверждение завершённого кэширования всех ресурсов сборки, включая дополнительные чанки и локальные ресурсы. После этого можно закрыть браузер и открыть тот же адрес в том же профиле без сети; задачи и новые изменения сохраняются локально. Первый запуск без ранее загруженной оболочки не гарантируется.
+## Recurring tasks
 
-Обновление устанавливается в фоне, но не перезагружает открытые вкладки и не сбрасывает черновики. При сообщении об обновлении сохраните изменения и закройте все вкладки планера; новая оболочка начнёт работать при следующем открытии. Неудачное обновление оставляет предыдущую оболочку и задачи. Удаляется только устаревший кэш оболочки, не IndexedDB. Очистка данных сайта или вытеснение хранилища браузером может удалить и оболочку, и задачи — кэш не заменяет резервную копию.
+A task can repeat daily, on chosen weekdays, monthly or yearly, every N days, weeks, months or years, with an optional end date. A task on the 31st falls on the last day of shorter months.
 
-`pnpm test:offline` запускает отдельный production preview на порту 4182 и проверки настоящих service worker/IndexedDB, в том числе закрытие постоянного профиля и повторное открытие без сети. Не запускайте одновременно другую сборку в этом же checkout.
+Each occurrence is checked off on its own. When you edit or delete an occurrence, uWeek asks whether to change just this one or this and all following. Missed occurrences also move to today, marked with the day they belonged to.
 
-## Данные
+## Search
 
-Задачи хранятся только в IndexedDB этого origin и браузерного профиля. Смена адреса, порта или профиля не переносит их. Очистка данных сайта может удалить план, а приватный режим не гарантирует долговременного хранения. Используйте одну рабочую вкладку. Приложение не отправляет пользовательские данные и не загружает внешние шрифты, аналитику или ссылки из задач.
+Search in the header looks through titles and notes. Pick a result to open the week or list that holds the task, with the task highlighted.
 
-При ошибке записи задача не появляется на доске, сообщение явно указывает несохранённость, а введённый текст остаётся для повторной попытки. Недоступная база не заменяется временным хранением.
+## Agents
 
-В разделе «Данные» скачайте JSON-копию и вручную перенесите её на другое устройство или в другой профиль. Выберите «Восстановить JSON», проверьте количество задач и списков, при необходимости скачайте текущую копию и явно подтвердите полную замену. До подтверждения можно отменить без изменений. Настройки, чек-листы, цвета, порядок и история CSV сохраняются; после восстановления открывается текущая неделя. Копия содержит личные данные открытым текстом — храните её безопасно. Постоянное хранение можно запросить в том же разделе; отказ не блокирует работу, а разрешение не заменяет копию.
+You can let your scripts and AI agents work with your tasks. Under ⋯ → API tokens, create a personal token: it is shown once and can be revoked at any time. The token works with the REST API, described in [OpenAPI](https://uweek.top/api/v1/openapi.json), and with the MCP server. Through them an agent such as Claude reads your week and lists, searches, creates, moves and completes tasks. The same page has a ready-made snippet to connect an agent.
 
-[Формат резервной копии v1](docs/backup-format-v1.md) документирован отдельно от UI. Production-проверки копии: `pnpm exec playwright test --config playwright.backup.config.ts` (не запускайте параллельно другую сборку в этом checkout).
+## Self-hosting
 
-## Переход с Tweek
+To run your own copy or work on the code, see [docs/self-hosting.md](docs/self-hosting.md).
 
-Выберите локальный файл «Tweek CSV», проверьте preview и подтвердите добавление. Отмена ничего не записывает; импорт не заменяет текущий план и не переключает неделю. Повтор **тех же байтов** файла (в том числе с другим именем) добавляет ноль; изменённый файл считается новым и может повторять задачи. Одинаковые строки внутри файла сохраняются отдельно.
+## License
 
-CSV не содержит правил повторения: серии не восстанавливаются и после последней выгруженной даты новые вхождения не создаются. Списки и их задачи, отсутствующие в файле, не восстанавливаются; создайте их вручную. [Полный CSV-контракт](docs/csv-import.md).
-
-## Браузеры и лицензия
-
-Целевые браузеры — актуальные Chromium/Chrome, Firefox и Safari. Chromium и настоящий Firefox проверены автоматизированно; native Safari на Linux недоступен и **не проверен**, WebKit не считается Safari. Мобильная раскладка проверена при 360 CSS px в desktop automation, не на физическом телефоне. [Фактическая приёмка и ограничения](docs/acceptance-report.md).
-
-Собственный код — [MIT](LICENSE). [Уведомления и совместимость зависимостей](THIRD_PARTY_NOTICES.md); эти файлы включены в статическую сборку.
-
-## Проверки
-
-```sh
-pnpm typecheck
-pnpm lint
-pnpm format:check
-pnpm exec playwright install chromium firefox
-pnpm test:browser
-pnpm exec playwright test --config playwright.acceptance.config.ts
-```
-
-Браузерный набор собирает статическое приложение и запускает локальный preview. Тесты используют настоящий Chromium/IndexedDB: создание и порядок, пустой ввод и Escape, перезагрузка, закрытие и открытие постоянного профиля, смена часового пояса, отмена настоящей транзакции после успеха запроса, раскладки 360/1200 px. Все данные синтетические; личные CSV не нужны.
-
-## Границы модулей
-
-- `src/model.ts` — задачи, списки и взаимоисключающее размещение по дате или списку.
-- `src/storage.ts` — IndexedDB со схемой v3, атомарные операции задач, списков, импорта и восстановления. Успех только после завершения транзакции; обновление схемы сохраняет данные.
-- `src/calendar.ts` — локальные календарные даты без UTC и расчёт недели.
-- `src/board.ts` — отображение и быстрый ввод; получает данные и асинхронную команду создания, не открывает базу.
-- `src/editor.ts`, `src/search.ts`, `src/import-ui.ts`, `src/data-ui.ts` — пользовательские операции, поиск и перенос данных; `src/main.ts` — композиция. CSV проверяет `src/csv.ts`, формат копии — `src/backup.ts`, оболочку — `src/offline.ts` и `scripts/sw.js`.
-
-Версии инструментов закреплены по npm registry; TypeScript 6.0.3 выбран вместо latest 7.0.2 из-за ограничения совместимости typescript-eslint `<6.1`. Конфигурация сверена с Context7 документацией Vite, Playwright, typescript-eslint и Prettier.
+Code: [MIT](LICENSE). [Third-party notices](THIRD_PARTY_NOTICES.md).
