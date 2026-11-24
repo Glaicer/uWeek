@@ -1,8 +1,0 @@
-[Unit]
-Description=uWeek Postgres backup
-Requires=docker.service
-After=docker.service
-
-[Service]
-Type=oneshot
-ExecStart=/opt/uweek-db/backup.sh
