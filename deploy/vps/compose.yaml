@@ -1,0 +1,44 @@
+name: uweek-db
+
+services:
+  postgres:
+    image: postgres:18.7-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: uweek
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set in .env}
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/certs/server.crt
+      - -c
+      - ssl_key_file=/certs/server.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.3
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - "log_line_prefix=%m [%p] %h "
+    ports:
+      - "${PG_PORT:?set in .env}:5432"
+    volumes:
+      - data:/var/lib/postgresql
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./certs:/certs:ro
+      - ./init:/docker-entrypoint-initdb.d:ro
+    # why: fail2ban reads the auth failures from the journal by this container name
+    logging:
+      driver: journald
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      retries: 15
+
+volumes:
+  data:

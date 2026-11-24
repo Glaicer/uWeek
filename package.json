@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm db:up && NEXT_TELEMETRY_DISABLED=1 next dev --hostname 127.0.0.1 --port 4200",
     "build": "NEXT_TELEMETRY_DISABLED=1 next build",
+    "build:vercel": "if [ \"$VERCEL_ENV\" = production ]; then pnpm db:migrate; fi && pnpm build",
     "start": "NEXT_TELEMETRY_DISABLED=1 next start --hostname 127.0.0.1 --port 4201",
     "db:up": "docker compose up -d --wait",
     "db:generate": "drizzle-kit generate",
@@ -40,6 +41,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",
+    "@sentry/nextjs": "11.16.0",
+    "@vercel/functions": "3.11.3",
     "better-auth": "1.7.23",
     "drizzle-orm": "0.45.4",
     "next": "16.3.8",

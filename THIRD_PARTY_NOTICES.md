@@ -4,13 +4,14 @@ uWeek source is MIT licensed. Versions below are pinned in `package.json` and `p
 
 ## Distributed framework dependencies (Next.js delivery)
 
-The browser also receives framework code, all MIT:
+The browser also receives framework code and the error reporter, all MIT:
 
-| Direct package | Version | License | Source                            |
-| -------------- | ------- | ------- | --------------------------------- |
-| next           | 16.3.8  | MIT     | https://github.com/vercel/next.js |
-| react          | 19.3.0  | MIT     | https://github.com/facebook/react |
-| react-dom      | 19.3.0  | MIT     | https://github.com/facebook/react |
+| Direct package | Version | License | Source                                         |
+| -------------- | ------- | ------- | ---------------------------------------------- |
+| next           | 16.3.8  | MIT     | https://github.com/vercel/next.js              |
+| react          | 19.3.0  | MIT     | https://github.com/facebook/react              |
+| react-dom      | 19.3.0  | MIT     | https://github.com/facebook/react              |
+| @sentry/nextjs | 11.16.0 | MIT     | https://github.com/getsentry/sentry-javascript |
 
 Their MIT texts follow the same terms as the application's `LICENSE` (copyright Meta Platforms, Inc. for React and React DOM; Vercel, Inc. for Next.js).
 

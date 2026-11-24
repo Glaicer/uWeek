@@ -24,6 +24,7 @@
     "next-env.d.ts",
     "next.config.ts",
     "instrumentation.ts",
+    "instrumentation-client.ts",
     "src",
     "app",
     "drizzle.config.ts",

@@ -1,16 +1,19 @@
-import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
+import { getTableName } from "drizzle-orm";
+import { RateLimiterPostgres, RateLimiterRes } from "rate-limiter-flexible";
 import { ApiError } from "./api-errors";
 import { authenticateApiToken, type ApiPrincipal } from "./api-tokens";
+import { db } from "./db/client";
+import { rateLimits } from "./db/schema";
 
-const globalForLimiter = globalThis as typeof globalThis & {
-  uweekApiLimiter?: RateLimiterMemory;
-};
-
-// why: dev hot reload re-evaluates modules; one budget must cover every protected route
-const limiter = (globalForLimiter.uweekApiLimiter ??= new RateLimiterMemory({
+// why: serverless instances share no memory, so the budget lives in the database
+const limiter = new RateLimiterPostgres({
+  storeClient: db.$client,
+  tableName: getTableName(rateLimits),
+  tableCreated: true,
+  keyPrefix: "api",
   points: 120,
   duration: 60,
-}));
+});
 
 function bearerToken(header: string | null): string | null {
   if (header === null) return null;

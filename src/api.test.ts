@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "vitest";
+import { afterAll, expect, test, vi } from "vitest";
 import { handleApiRequest } from "./api";
 import { createApiToken, revokeApiToken } from "./api-tokens";
 import { db } from "./db/client";
@@ -24,6 +24,7 @@ async function newUser(): Promise<string> {
 
 interface Api {
   userId: string;
+  token: string;
   tokenId: string;
   fetch(path: string, init?: RequestInit): Promise<Response>;
   get(path: string): Promise<Response>;
@@ -53,6 +54,7 @@ async function newApi(): Promise<Api> {
       });
   return {
     userId: user,
+    token,
     tokenId: info.id,
     fetch: call,
     get: (path) => call(path),
@@ -947,4 +949,26 @@ test("revocation takes effect on the next request", async () => {
     now,
   );
   expect(allowed.status).toBe(200);
+});
+
+test("every app instance spends one shared budget per token", async () => {
+  const api = await newApi();
+  for (let index = 0; index < 120; index++)
+    expect((await api.get("/lists")).status, `request ${index + 1}`).toBe(200);
+
+  // why: a fresh module graph stands in for another serverless instance with its own memory
+  vi.resetModules();
+  const other = await import("./api");
+  const limited = await other.handleApiRequest(
+    new Request(`${origin}/api/v1/lists`, {
+      headers: { Authorization: `Bearer ${api.token}` },
+    }),
+    now,
+  );
+
+  expect(limited.status).toBe(429);
+  const retryAfter = Number(limited.headers.get("retry-after"));
+  expect(Number.isInteger(retryAfter)).toBe(true);
+  expect(retryAfter).toBeGreaterThan(0);
+  expect(retryAfter).toBeLessThanOrEqual(60);
 });

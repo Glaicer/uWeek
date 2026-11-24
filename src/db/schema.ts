@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   date,
@@ -11,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  varchar,
 } from "drizzle-orm/pg-core";
 import type { WeekStart } from "../calendar";
 import { taskColorValues, type TaskColor } from "../model";
@@ -236,3 +238,10 @@ export const apiTokens = pgTable(
   },
   (table) => [index().on(table.userId)],
 );
+
+// why: the columns rate-limiter-flexible's RateLimiterPostgres reads and writes; it must not create the table itself
+export const rateLimits = pgTable("rate_limits", {
+  key: varchar({ length: 255 }).primaryKey(),
+  points: integer().default(0).notNull(),
+  expire: bigint({ mode: "number" }),
+});
