@@ -1,4 +1,4 @@
-# Self-hosting and development
+# Self-hosting
 
 ## Architecture
 
@@ -12,22 +12,6 @@ One Next.js (App Router) application on Node.js: pages, server actions and API r
 
 Pages: `/sign-in` asks for the email; `/sign-in/confirm?token=…` is the link from the email: GET changes nothing and the "Sign in" button completes the sign-in, so mail scanners and prefetchers can't burn the link; `/` is the current week, `/?week=YYYY-MM-DD` the week containing that date; without a session it redirects to sign-in. Sign-out and the week start are in the header menu.
 
-## Development
-
-Requires Node.js 24+, pnpm 12.3.4 and Docker.
-
-```sh
-pnpm install --frozen-lockfile
-cp .env.example .env       # set BETTER_AUTH_SECRET; uncomment MAIL_OUTBOX_DIR for local email
-pnpm dev                   # http://127.0.0.1:4200
-```
-
-`pnpm dev` starts Postgres 18 itself (`docker compose up -d --wait`, 127.0.0.1:5433, databases `uweek` and `uweek_test`) and applies migrations; `pnpm test` and `pnpm test:e2e` start Postgres themselves too.
-
-With `MAIL_OUTBOX_DIR=.outbox` the sign-in link is in the newest `.outbox/*.json` file.
-
-After changing `src/db/schema.ts`, generate a migration with `pnpm db:generate`; a running `pnpm dev` applies it on its own (it watches `drizzle/meta`); without a dev server, run `pnpm db:migrate`.
-
 ## Google sign-in
 
 The "Continue with Google" button on the sign-in page appears only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; without them the app works as before, with the email link.
@@ -36,21 +20,6 @@ The "Continue with Google" button on the sign-in page appears only when `GOOGLE_
 2. Clients → Create client → Web application.
 3. Under Authorized redirect URIs add `http://127.0.0.1:4200/api/auth/callback/google` for development and `https://<domain>/api/auth/callback/google` for production. better-auth builds the URI from `BETTER_AUTH_URL`, and Google compares it exactly, so `localhost` and `127.0.0.1` are different URIs. Plain http is allowed only for localhost and loopback addresses.
 4. Copy the Client ID and Client secret into `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and restart `pnpm dev`.
-
-## Checks
-
-```sh
-pnpm typecheck
-pnpm lint
-pnpm format:check
-pnpm test
-pnpm exec playwright install chromium
-pnpm test:e2e
-```
-
-`pnpm test` runs the vitest integration tests (`src/**/*.test.ts`) against the `uweek_test` database, applying migrations first.
-
-`pnpm test:e2e`: Playwright applies migrations to `uweek_test` and starts its own `next dev` on port 4172 with a separate build folder `.next-e2e`, so it doesn't interfere with a running `pnpm dev`. Emails are captured through `MAIL_OUTBOX_DIR=test-results/outbox`.
 
 ## Deployment
 
@@ -72,6 +41,6 @@ The whole application runs in Vercel functions (Hobby, region `fra1` in `vercel.
 
 3. Attach your domain. In Google Auth Platform add the redirect URI `https://<domain>/api/auth/callback/google`.
 
-The build runs `pnpm build:vercel`. In a production build it first applies migrations (`pnpm db:migrate`; a rerun changes nothing), then runs `next build`. Traffic switches only after a successful build, so until then the old version runs on the new schema, and a migration must stay compatible with it. Preview builds don't touch the database; without `DATABASE_URL` a preview doesn't work.
+The build runs `pnpm build:vercel`. In a production build it first applies migrations (`pnpm db:migrate`; a rerun changes nothing), then runs `next build`. Traffic switches only after a successful build, so until then the old version runs on the new schema, and a migration must stay compatible with it. Only `main` deploys (`git.deploymentEnabled` in `vercel.json`): previews would have no database.
 
 Each function has its own pool: `max: 5`, idle connections close after 5 s (`attachDatabasePool`). The API rate limit (120 requests per minute per token) is kept in the `rate_limits` table and shared by all instances. Server and browser errors go to GlitchTip through `@sentry/nextjs` when `NEXT_PUBLIC_SENTRY_DSN` is set. Source maps aren't uploaded, so stack traces in GlitchTip are minified.
