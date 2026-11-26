@@ -1,4 +1,4 @@
-/docs/
+/docs/*
 /.scratch/
 /node_modules/
 /dist/
@@ -6,9 +6,17 @@
 *.tsbuildinfo
 /test-results/
 /playwright-report/
+/coverage/
 /next-env.d.ts
 /.next-e2e/
 /.outbox/
-/.opencode/opencode.json
+/.repowise/
+/.claude/
+/.github/
+/.opencode/
+/.vscode/
+/opencode.jsonc
 .env
+.env.*
+!.env.example
 GLOSSARY.md
