@@ -1,4 +1,6 @@
 /docs/*
+!/docs/development.md
+!/docs/self-hosting.md
 /.scratch/
 /node_modules/
 /dist/
