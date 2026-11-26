@@ -40,7 +40,7 @@ You can let your scripts and AI agents work with your tasks. Under ⋯ → API t
 
 ## Self-hosting
 
-To run your own copy or work on the code, see [docs/self-hosting.md](docs/self-hosting.md).
+To run your own copy, see [docs/self-hosting.md](docs/self-hosting.md); to work on the code, see [docs/development.md](docs/development.md).
 
 ## License
 
